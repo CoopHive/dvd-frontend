@@ -55,7 +55,7 @@ export default function ChatInterface() {
             <div className="p-4">
               <Button
                 variant="outline"
-                className="w-full justify-start gap-2 bg-transparent border-[#2a2a2a] hover:bg-[#2a2a2a]"
+                className="w-full justify-start gap-2 bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300"
                 onClick={startNewChat}
               >
                 <Plus className="h-4 w-4" />
@@ -149,7 +149,7 @@ export default function ChatInterface() {
               variant="outline"
               size="sm"
               onClick={startNewChat}
-              className="text-xs bg-transparent border-[#2a2a2a] hover:bg-[#2a2a2a]"
+              className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300"
             >
               <Plus className="h-3 w-3 mr-1" />
               New Chat
@@ -250,26 +250,27 @@ export default function ChatInterface() {
           </div>
           
           {/* Input Form */}
-          <div className="border-t border-[#2a2a2a] p-4">
+          <div className="border-t border-[#2a2a2a] p-4 pb-6 bg-gradient-to-b from-[#0a0a0a] to-[#111111]">
             <div className="max-w-3xl mx-auto">
-              <form onSubmit={handleSubmit} className="flex space-x-2 relative">
-                <div className="flex-1 relative">
+              <form onSubmit={handleSubmit} className="flex items-end space-x-2 relative">
+                <div className="flex-1 relative shadow-lg">
                   <Input
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     placeholder="Send a message..."
-                    className="py-6 px-4 pr-10 bg-[#343541] text-[#ececf1] border-[#343541] focus-visible:ring-0 focus-visible:ring-offset-0 h-auto text-sm"
+                    className="py-6 px-5 pr-12 bg-[#2a2a2a] text-[#ececf1] border-none rounded-2xl focus-visible:ring-1 focus-visible:ring-[#1a7f64] focus-visible:ring-offset-0 h-auto text-sm shadow-inner"
                     disabled={isLoading || showResponseOptions}
                   />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#2d2d2d] to-[#2a2a2a] rounded-2xl opacity-30 pointer-events-none"></div>
                 </div>
                 <Button
                   type="submit"
                   size="icon"
                   disabled={!inputValue.trim() || isLoading || showResponseOptions}
-                  className="bg-[#1a7f64] hover:bg-[#18735a] self-stretch"
+                  className="bg-[#1a7f64] hover:bg-[#18735a] rounded-full h-12 w-12 shadow-md"
                 >
-                  <Send className="h-4 w-4" />
+                  <Send className="h-5 w-5" />
                   <span className="sr-only">Send</span>
                 </Button>
               </form>
