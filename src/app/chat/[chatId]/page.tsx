@@ -2,12 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useChat } from "~/hooks/use-chat";
 import ChatInterface from "~/components/chat-interface";
 
 export default function ChatPage() {
-  const { data: session, status } = useSession();
-  const { activeChat, isAuthenticated } = useChat();
+  const { status } = useSession();
   
   // If the user is not authenticated, redirect to signin page
   if (status === "unauthenticated") {

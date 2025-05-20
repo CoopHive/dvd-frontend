@@ -15,6 +15,4 @@ export type Chat = {
   messages: Message[];
 };
 
-export interface UserChats {
-  [chatId: string]: Chat;
-} 
+export type UserChats = Record<string, Chat>; 

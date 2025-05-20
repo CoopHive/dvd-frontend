@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react"; 
+import { signOut, useSession } from "next-auth/react"; 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { cn } from "~/lib/utils";
-import { Send, Menu, Plus, LogOut, Trash2 } from "lucide-react";
+import { Send, Menu, Plus, LogOut, Trash2, User, Check } from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
+import { Avatar, AvatarImage, AvatarFallback } from "~/components/ui/avatar";
 
 export default function ChatInterface() {
   const {
@@ -20,8 +20,12 @@ export default function ChatInterface() {
     sendMessage,
     startNewChat,
     removeChat,
+    responseOptions,
+    showResponseOptions,
+    selectResponseOption,
   } = useChat();
   
+  const { data: session } = useSession();
   const [showSidebar, setShowSidebar] = useState(true);
   
   const toggleSidebar = () => {
@@ -30,11 +34,11 @@ export default function ChatInterface() {
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    sendMessage(inputValue);
+    void sendMessage(inputValue);
   };
   
-  const handleSignOut = () => {
-    signOut({ callbackUrl: "/auth/signin" });
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: "/auth/signin" });
   };
 
   const navigateToChat = (chatId: string) => {
@@ -122,9 +126,25 @@ export default function ChatInterface() {
             <span className="sr-only">Toggle Sidebar</span>
           </Button>
           <h1 className="font-medium text-sm">
-            {activeChat?.title || "New Chat"}
+            {activeChat?.title ?? "New Chat"}
           </h1>
           <div className="ml-auto flex items-center space-x-2">
+            {session?.user && (
+              <div className="flex items-center mr-4">
+                <Avatar className="h-7 w-7 mr-2">
+                  {session.user.image ? (
+                    <AvatarImage src={session.user.image} alt={session.user.name ?? 'User'} />
+                  ) : (
+                    <AvatarFallback className="bg-[#1a7f64]">
+                      <User className="h-3.5 w-3.5" />
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+                <span className="text-xs text-zinc-300">
+                  {session.user.name ?? session.user.email}
+                </span>
+              </div>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -169,6 +189,34 @@ export default function ChatInterface() {
                 </div>
               ))}
               
+              {/* AI Response Options */}
+              {showResponseOptions && responseOptions.length > 0 && (
+                <div className="flex items-start">
+                  <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium">
+                    AI
+                  </div>
+                  <div className="flex flex-col space-y-3 w-full">
+                    {responseOptions.map((option) => (
+                      <div 
+                        key={option.id}
+                        className="bg-[#2a2a2a] hover:bg-[#3a3a3a] px-4 py-3 rounded-xl cursor-pointer transition-colors flex items-start group"
+                        onClick={() => selectResponseOption(option.id)}
+                      >
+                        <div className="prose prose-invert max-w-none flex-1">
+                          <p>{option.content}</p>
+                        </div>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 mt-1">
+                          <Check className="h-4 w-4 text-[#1a7f64]" />
+                        </div>
+                      </div>
+                    ))}
+                    <div className="text-xs text-zinc-500 italic mt-1 pl-1">
+                      Choose one of the responses above
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {isLoading && (
                 <div className="flex items-start">
                   <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium">
@@ -192,7 +240,7 @@ export default function ChatInterface() {
               )}
               
               {/* If no messages */}
-              {activeChat?.messages?.length === 0 && (
+              {activeChat?.messages?.length === 0 && !isLoading && !showResponseOptions && (
                 <div className="flex flex-col items-center justify-center py-12">
                   <h2 className="text-xl font-medium">Start a new conversation</h2>
                   <p className="text-zinc-400 mt-2">Send a message to get started</p>
@@ -212,13 +260,13 @@ export default function ChatInterface() {
                     onChange={(e) => setInputValue(e.target.value)}
                     placeholder="Send a message..."
                     className="py-6 px-4 pr-10 bg-[#343541] text-[#ececf1] border-[#343541] focus-visible:ring-0 focus-visible:ring-offset-0 h-auto text-sm"
-                    disabled={isLoading}
+                    disabled={isLoading || showResponseOptions}
                   />
                 </div>
                 <Button
                   type="submit"
                   size="icon"
-                  disabled={!inputValue.trim() || isLoading}
+                  disabled={!inputValue.trim() || isLoading || showResponseOptions}
                   className="bg-[#1a7f64] hover:bg-[#18735a] self-stretch"
                 >
                   <Send className="h-4 w-4" />

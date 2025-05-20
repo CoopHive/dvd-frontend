@@ -2,12 +2,11 @@ import "~/styles/globals.css";
 
 import { type Metadata } from "next";
 import { Geist } from "next/font/google";
-import { cn } from "~/lib/utils";
 import { ThemeProvider } from "~/components/theme-provider";
 import { SessionProvider } from "~/components/session-provider";
 
 export const metadata: Metadata = {
-  title: "Modern Chat App",
+  title: "Apiary DVD",
   description: "A ChatGPT-style interface built with Next.js and Tailwind",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };

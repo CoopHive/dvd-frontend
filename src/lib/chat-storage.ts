@@ -26,7 +26,7 @@ export function getAllChats(userId: string): UserChats {
 // Function to get a single chat by ID for a specific user
 export function getChat(userId: string, chatId: string): Chat | null {
   const chats = getAllChats(userId);
-  return chats[chatId] || null;
+  return chats[chatId] ?? null;
 }
 
 // Function to create a new chat for a specific user

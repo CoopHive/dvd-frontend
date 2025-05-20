@@ -6,21 +6,6 @@ export const env = createEnv({
    * Specify your server-side environment variables schema here. This way you can ensure the app
    * isn't built with invalid env vars.
    */
-  server: {
-    AUTH_SECRET:
-      process.env.NODE_ENV === "production"
-        ? z.string()
-        : z.string().optional(),
-    AUTH_DISCORD_ID: process.env.NODE_ENV === "production"
-      ? z.string()
-      : z.string().optional(),
-    AUTH_DISCORD_SECRET: process.env.NODE_ENV === "production"
-      ? z.string()
-      : z.string().optional(),
-    NODE_ENV: z
-      .enum(["development", "test", "production"])
-      .default("development"),
-  },
 
   /**
    * Specify your client-side environment variables schema here. This way you can ensure the app
@@ -37,9 +22,6 @@ export const env = createEnv({
    */
   runtimeEnv: {
     AUTH_SECRET: process.env.AUTH_SECRET,
-    AUTH_DISCORD_ID: process.env.AUTH_DISCORD_ID,
-    AUTH_DISCORD_SECRET: process.env.AUTH_DISCORD_SECRET,
-    NODE_ENV: process.env.NODE_ENV,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**
