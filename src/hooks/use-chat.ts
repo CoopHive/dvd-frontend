@@ -18,6 +18,27 @@ export type ResponseOption = {
   content: string;
 };
 
+// API configuration
+const API_CONFIG = {
+  url: "http://localhost:3001/api/evaluate",
+  collections: ["openai_paragraph_openai", "openai_fixed_length_openai"],
+  model: "openai/gpt-3.5-turbo-0613"
+};
+
+// OpenRouter API configuration
+const OPENROUTER_CONFIG = {
+  url: "https://openrouter.ai/api/v1/chat/completions",
+  model: "openai/gpt-3.5-turbo", // Default model
+  // Use environment variable for the API key
+  apiKey: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || ""
+};
+
+// For debugging
+const logApiRequest = (url: string, payload: any) => {
+  console.log(`Sending request to: ${url}`);
+  console.log('Request payload:', JSON.stringify(payload, null, 2));
+};
+
 export const useChat = () => {
   const router = useRouter();
   const params = useParams();
@@ -36,20 +57,6 @@ export const useChat = () => {
   const initialLoadComplete = useRef(false);
   
   const chatId = params?.chatId as string | undefined;
-  
-  // Mock responses for the chat - wrapped in useMemo to avoid dependency changes
-  const mockResponses = useMemo(() => [
-    "Hello! How can I help you today?",
-    "That's an interesting question. Let me think about it...",
-    "Based on my knowledge, the answer is quite complex but I'll try to explain it simply.",
-    "I don't have that information at the moment, but I can suggest some resources.",
-    "That's a great point! I hadn't considered that perspective before.",
-    "Let me break this down into simpler parts so it's easier to understand.",
-    "This is a common question. Here's my take on it...",
-    "There are multiple ways to approach this. One option is...",
-    "I understand your concern. Here's what I recommend...",
-    "From my analysis, the best approach would be to..."
-  ], []);
   
   // Load chats from storage - without activeChat as dependency to avoid loops
   const loadChats = useCallback(() => {
@@ -125,25 +132,181 @@ export const useChat = () => {
     router.push(`/chat/${newChat.id}`);
   }, [router, userId]);
 
-  // Generate multiple response options
-  const generateResponseOptions = useCallback(() => {
-    // Get 3 unique random responses
-    const options: ResponseOption[] = [];
-    const usedIndices = new Set<number>();
+  // Fetch response options from API
+  const fetchResponseOptions = useCallback(async (query: string): Promise<ResponseOption[]> => {
+    const payload = {
+      query: query,
+      collections: API_CONFIG.collections,
+      db_path: null,
+      model_name: API_CONFIG.model
+    };
     
-    while (options.length < 3) {
-      const randomIndex = Math.floor(Math.random() * mockResponses.length);
-      if (!usedIndices.has(randomIndex)) {
-        usedIndices.add(randomIndex);
-        options.push({
+    logApiRequest(API_CONFIG.url, payload);
+    
+    try {
+      const response = await fetch(API_CONFIG.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      console.log(`API response status: ${response.status}`);
+      
+      if (!response.ok) {
+        console.error(`API request failed with status ${response.status}`);
+        return [
+          { id: uuidv4(), content: `Error: API request failed with status ${response.status}. Please check the server connection.` },
+          { id: uuidv4(), content: "The API server might not be running or the endpoint might be incorrect." },
+          { id: uuidv4(), content: "You can continue testing the interface while the backend issue is being resolved." }
+        ];
+      }
+      
+      const data = await response.json();
+      console.log('API response data:', data);
+      
+      // Extract content fields from each collection
+      const contentByCollection: Record<string, any> = {};
+      const responseOptions: ResponseOption[] = [];
+      
+      if (data.collection_results) {
+        // Iterate through each collection
+        for (const [collectionName, collectionData] of Object.entries(data.collection_results)) {
+          // Skip collections with errors
+          if (typeof collectionData === 'object' && collectionData !== null && 'error' in collectionData) {
+            contentByCollection[collectionName] = { error: (collectionData as { error: string }).error };
+            // Add an error option for this collection
+            responseOptions.push({
+              id: uuidv4(),
+              content: `Collection ${collectionName}: Error - ${(collectionData as { error: string }).error}`
+            });
+            continue;
+          }
+          
+          // Get contents from results if they exist
+          if (
+            typeof collectionData === 'object' && 
+            collectionData !== null && 
+            'results' in collectionData && 
+            Array.isArray((collectionData as { results: any[] }).results)
+          ) {
+            const contents = ((collectionData as { results: any[] }).results)
+              .map((result: any) => {
+                // Extract content from metadata if it exists
+                if (result.metadata && result.metadata.content) {
+                  return result.metadata.content;
+                }
+                return null;
+              })
+              .filter((content: any) => content !== null); // Remove null entries
+            
+            contentByCollection[collectionName] = contents;
+            
+            // Process this collection with OpenRouter
+            if (contents.length > 0) {
+              try {
+                const openRouterResponse = await processWithOpenRouter(query, contents, collectionName);
+                responseOptions.push({
+                  id: uuidv4(),
+                  content: `${collectionName}: ${openRouterResponse}`
+                });
+              } catch (error) {
+                console.error(`Error processing ${collectionName} with OpenRouter:`, error);
+                responseOptions.push({
+                  id: uuidv4(),
+                  content: `Collection ${collectionName}: Failed to process with AI. ${error instanceof Error ? error.message : 'Unknown error'}`
+                });
+              }
+            } else {
+              responseOptions.push({
+                id: uuidv4(),
+                content: `Collection ${collectionName}: No content available`
+              });
+            }
+          } else {
+            contentByCollection[collectionName] = [];
+            responseOptions.push({
+              id: uuidv4(),
+              content: `Collection ${collectionName}: No results found`
+            });
+          }
+        }
+      }
+      
+      // If no valid responses were generated, add a fallback
+      if (responseOptions.length === 0) {
+        responseOptions.push({
           id: uuidv4(),
-          content: mockResponses[randomIndex] ?? "I'm not sure how to respond to that."
+          content: "No valid responses could be generated from the available collections."
         });
       }
+      
+      return responseOptions;
+    } catch (error) {
+      console.error('Error fetching response options:', error);
+      
+      // Return fallback options in case of error
+      return [
+        { id: uuidv4(), content: `Error connecting to API: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { id: uuidv4(), content: "Would you like to try a different question or check your API server?" },
+        { id: uuidv4(), content: "You can still test the interface while the API connection is being fixed." }
+      ];
+    }
+  }, []);
+  
+  // Process collection content with OpenRouter
+  const processWithOpenRouter = async (userQuery: string, contents: string[], collectionName: string): Promise<string> => {
+    if (!OPENROUTER_CONFIG.apiKey) {
+      return "Please add your OpenRouter API";
     }
     
-    return options;
-  }, [mockResponses]);
+    // Combine the content into a context string
+    const context = contents.join("\n\n");
+    
+    // Prepare the message for OpenRouter
+    const openRouterPayload = {
+      model: OPENROUTER_CONFIG.model,
+      messages: [
+        {
+          role: "system",
+          content: `You are a helpful assistant. Answer the user's question based ONLY on the following information from collection "${collectionName}":\n\n${context}\n\n Format your response with markdown: use **bold** for important points, bullet lists (•) for multiple items, and organize information in a readable format. If information is provided in numbered lists, preserve that structure.`
+        },
+        {
+          role: "user",
+          content: userQuery
+        }
+      ]
+    };
+    
+    console.log(`Sending to OpenRouter (collection: ${collectionName}):`, openRouterPayload);
+    
+    const response = await fetch(OPENROUTER_CONFIG.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENROUTER_CONFIG.apiKey}`,
+        "HTTP-Referer": window.location.origin,
+        "X-Title": "Chat UI Demo"
+      },
+      body: JSON.stringify(openRouterPayload)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log(`OpenRouter response (collection: ${collectionName}):`, result);
+    
+    // Extract the assistant's response
+    if (result.choices && result.choices.length > 0 && result.choices[0].message) {
+      return result.choices[0].message.content;
+    }
+    
+    return "No response received from OpenRouter.";
+  };
   
   // Send a message
   const sendMessage = useCallback(
@@ -172,19 +335,21 @@ export const useChat = () => {
         }
       }
       
-      // Simulate AI thinking
-      setTimeout(() => {
-        // Generate multiple response options
-        const options = generateResponseOptions();
+      try {
+        // Fetch responses from API
+        const options = await fetchResponseOptions(content);
         setResponseOptions(options);
         setShowResponseOptions(true);
+      } catch (error) {
+        console.error('Error in sendMessage:', error);
+      } finally {
         setIsLoading(false);
-      }, 1000);
+      }
       
       // Clear input
       setInputValue("");
     },
-    [chatId, isLoading, router, userId, activeChat, generateResponseOptions]
+    [chatId, isLoading, router, userId, activeChat, fetchResponseOptions]
   );
   
   // Select a response option

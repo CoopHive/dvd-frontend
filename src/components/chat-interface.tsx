@@ -9,6 +9,8 @@ import { Send, Menu, Plus, LogOut, Trash2, User, Check } from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "~/components/ui/avatar";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function ChatInterface() {
   const {
@@ -176,7 +178,22 @@ export default function ChatInterface() {
                         AI
                       </div>
                       <div className="prose prose-invert max-w-none">
-                        <p>{message.content}</p>
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            // Add custom styling for markdown elements
+                            strong: ({node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
+                            h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                            h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
+                            h3: ({node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
+                            ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
+                            ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
+                            li: ({node, ...props}) => <li className="my-1" {...props} />,
+                            p: ({node, ...props}) => <p className="my-2" {...props} />,
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
                       </div>
                     </div>
                   ) : (
@@ -203,7 +220,30 @@ export default function ChatInterface() {
                         onClick={() => selectResponseOption(option.id)}
                       >
                         <div className="prose prose-invert max-w-none flex-1">
-                          <p>{option.content}</p>
+                          {option.content.startsWith('API Raw Data:') ? (
+                            <pre className="text-xs overflow-auto max-h-[400px] p-2 bg-[#1e1e1e] rounded">
+                              {option.content.replace('API Raw Data: ', '')}
+                            </pre>
+                          ) : option.content.startsWith('Collection ') && option.content.includes(': Error') ? (
+                            <p>{option.content}</p>
+                          ) : (
+                            <ReactMarkdown 
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                // Add custom styling for markdown elements
+                                strong: ({node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
+                                h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                                h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
+                                h3: ({node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
+                                ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
+                                ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
+                                li: ({node, ...props}) => <li className="my-1" {...props} />,
+                                p: ({node, ...props}) => <p className="my-2" {...props} />,
+                              }}
+                            >
+                              {option.content}
+                            </ReactMarkdown>
+                          )}
                         </div>
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 mt-1">
                           <Check className="h-4 w-4 text-[#1a7f64]" />
