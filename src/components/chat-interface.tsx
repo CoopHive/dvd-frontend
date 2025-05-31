@@ -5,7 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { cn } from "~/lib/utils";
-import { Send, Menu, Plus, LogOut, Trash2, User, Check } from "lucide-react";
+import { Send, Menu, Plus, LogOut, Trash2, User, Check, ToggleLeft, ToggleRight } from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "~/components/ui/avatar";
@@ -25,6 +25,10 @@ export default function ChatInterface() {
     responseOptions,
     showResponseOptions,
     selectResponseOption,
+    responseMode,
+    setResponseMode,
+    scoreResponseOption,
+    scoredOptions,
   } = useChat();
   
   const { data: session } = useSession();
@@ -58,6 +62,20 @@ export default function ChatInterface() {
     window.history.pushState({}, "", `/chat/${chatId}`);
     window.location.reload();
   };
+
+  const toggleResponseMode = () => {
+    setResponseMode(responseMode === "manual" ? "scoring" : "manual");
+  };
+
+  const handleScoreClick = (optionId: string, score: number) => {
+    scoreResponseOption(optionId, score);
+  };
+
+  const getScoreForOption = (optionId: string): number | undefined => {
+    return scoredOptions.get(optionId);
+  };
+
+  const allOptionsScored = responseOptions.length > 0 && responseOptions.every(option => scoredOptions.has(option.id));
   
   return (
     <div className="flex h-screen bg-[#0f0f0f]">
@@ -142,6 +160,24 @@ export default function ChatInterface() {
             {activeChat?.title ?? "New Chat"}
           </h1>
           <div className="ml-auto flex items-center space-x-2">
+            {/* Response Mode Toggle */}
+            <div className="flex items-center gap-2 mr-4">
+              <span className="text-xs text-zinc-400">Manual</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleResponseMode}
+                className="h-8 w-8 transition-all duration-200 hover:scale-110"
+              >
+                {responseMode === "manual" ? (
+                  <ToggleLeft className="h-5 w-5 text-zinc-400" />
+                ) : (
+                  <ToggleRight className="h-5 w-5 text-[#1a7f64]" />
+                )}
+              </Button>
+              <span className="text-xs text-zinc-400">Scoring</span>
+            </div>
+
             {session?.user && (
               <div className="flex items-center mr-4 transition-all duration-200 hover:scale-105">
                 <Avatar className="h-7 w-7 mr-2 transition-all duration-200 hover:scale-110">
@@ -227,43 +263,94 @@ export default function ChatInterface() {
                     {responseOptions.map((option, index) => (
                       <div 
                         key={option.id}
-                        className="bg-[#2a2a2a] hover:bg-[#3a3a3a] px-4 py-3 rounded-xl cursor-pointer transition-all duration-300 flex items-start group hover:scale-[1.01] hover:shadow-lg hover:shadow-[#1a7f64]/10 active:scale-[0.99] animate-in slide-in-from-left-2"
+                        className={cn(
+                          "bg-[#2a2a2a] px-4 py-3 rounded-xl transition-all duration-300 flex flex-col animate-in slide-in-from-left-2",
+                          responseMode === "manual" && "hover:bg-[#3a3a3a] cursor-pointer hover:scale-[1.01] hover:shadow-lg hover:shadow-[#1a7f64]/10 active:scale-[0.99]"
+                        )}
                         style={{ animationDelay: `${index * 100}ms` }}
-                        onClick={() => selectResponseOption(option.id)}
+                        onClick={responseMode === "manual" ? () => selectResponseOption(option.id) : undefined}
                       >
-                        <div className="prose prose-invert max-w-none flex-1">
-                          {option.content.startsWith('API Raw Data:') ? (
-                            <pre className="text-xs overflow-auto max-h-[400px] p-2 bg-[#1e1e1e] rounded">
-                              {option.content.replace('API Raw Data: ', '')}
-                            </pre>
-                          ) : option.content.startsWith('Collection ') && option.content.includes(': Error') ? (
-                            <p>{option.content}</p>
-                          ) : (
-                            <ReactMarkdown 
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                // Add custom styling for markdown elements
-                                strong: ({node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
-                                h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
-                                h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
-                                h3: ({node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
-                                ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
-                                ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
-                                li: ({node, ...props}) => <li className="my-1" {...props} />,
-                                p: ({node, ...props}) => <p className="my-2" {...props} />,
-                              }}
-                            >
-                              {option.content}
-                            </ReactMarkdown>
+                        <div className="flex items-start">
+                          <div className="prose prose-invert max-w-none flex-1">
+                            {option.content.startsWith('API Raw Data:') ? (
+                              <pre className="text-xs overflow-auto max-h-[400px] p-2 bg-[#1e1e1e] rounded">
+                                {option.content.replace('API Raw Data: ', '')}
+                              </pre>
+                            ) : option.content.startsWith('Collection ') && option.content.includes(': Error') ? (
+                              <p>{option.content}</p>
+                            ) : (
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  // Add custom styling for markdown elements
+                                  strong: ({node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
+                                  h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                                  h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
+                                  h3: ({node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
+                                  ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
+                                  ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
+                                  li: ({node, ...props}) => <li className="my-1" {...props} />,
+                                  p: ({node, ...props}) => <p className="my-2" {...props} />,
+                                }}
+                              >
+                                {option.content}
+                              </ReactMarkdown>
+                            )}
+                          </div>
+                          {responseMode === "manual" && (
+                            <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 ml-2 mt-1 transform group-hover:scale-110">
+                              <Check className="h-4 w-4 text-[#1a7f64]" />
+                            </div>
                           )}
                         </div>
-                        <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 ml-2 mt-1 transform group-hover:scale-110">
-                          <Check className="h-4 w-4 text-[#1a7f64]" />
-                        </div>
+                        
+                        {/* Scoring Interface */}
+                        {responseMode === "scoring" && (
+                          <div className="mt-3 pt-3 border-t border-[#3a3a3a]">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-zinc-400">Rate this response (1-10):</span>
+                              {getScoreForOption(option.id) && (
+                                <span className="text-xs font-medium text-[#1a7f64]">
+                                  Scored: {getScoreForOption(option.id)}/10
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-1 flex-wrap">
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => {
+                                const isSelected = getScoreForOption(option.id) === score;
+                                return (
+                                  <Button
+                                    key={score}
+                                    variant="ghost"
+                                    size="sm"
+                                    className={cn(
+                                      "h-8 w-8 p-0 text-xs transition-all duration-200 hover:scale-110 active:scale-95",
+                                      isSelected 
+                                        ? "bg-[#1a7f64] text-white hover:bg-[#18735a]" 
+                                        : "bg-[#1a1a1a] hover:bg-[#2a2a2a] text-zinc-300"
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleScoreClick(option.id, score);
+                                    }}
+                                  >
+                                    {score}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
+                    
                     <div className="text-xs text-zinc-500 italic mt-1 pl-1 animate-in fade-in duration-1000">
-                      Choose one of the responses above
+                      {responseMode === "manual" 
+                        ? "Choose one of the responses above" 
+                        : allOptionsScored 
+                          ? "All responses scored! The highest scored response will be automatically selected."
+                          : "Score each response from 1-10. The highest scored response will be automatically selected."
+                      }
                     </div>
                   </div>
                 </div>

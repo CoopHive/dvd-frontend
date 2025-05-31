@@ -16,7 +16,10 @@ import {
 export type ResponseOption = {
   id: string;
   content: string;
+  score?: number;
 };
+
+export type ResponseMode = "manual" | "scoring";
 
 // API configuration
 const API_CONFIG = {
@@ -52,6 +55,8 @@ export const useChat = () => {
   const [inputValue, setInputValue] = useState("");
   const [responseOptions, setResponseOptions] = useState<ResponseOption[]>([]);
   const [showResponseOptions, setShowResponseOptions] = useState(false);
+  const [responseMode, setResponseMode] = useState<ResponseMode>("manual");
+  const [scoredOptions, setScoredOptions] = useState<Map<string, number>>(new Map());
   
   // Track if initial load has happened
   const initialLoadComplete = useRef(false);
@@ -308,11 +313,108 @@ export const useChat = () => {
     return "No response received from OpenRouter.";
   };
   
-  // Send a message
+  // Score a response option
+  const scoreResponseOption = useCallback(
+    (optionId: string, score: number) => {
+      setScoredOptions(prev => new Map(prev.set(optionId, score)));
+      
+      // Check if all options are scored
+      const allScored = responseOptions.every(option => 
+        scoredOptions.has(option.id) || option.id === optionId
+      );
+      
+      if (allScored && responseMode === "scoring") {
+        // Automatically select the highest scored option
+        const scores = new Map(scoredOptions);
+        scores.set(optionId, score); // Include the current score
+        
+        let highestScore = 0;
+        let bestOptions: ResponseOption[] = [];
+        
+        responseOptions.forEach(option => {
+          const optionScore = scores.get(option.id) || 0;
+          if (optionScore > highestScore) {
+            highestScore = optionScore;
+            bestOptions = [option];
+          } else if (optionScore === highestScore && optionScore > 0) {
+            bestOptions.push(option);
+          }
+        });
+        
+        // Tie-breaking: select the first one (by index) if there are ties
+        const selectedOption = bestOptions[0];
+        
+        if (selectedOption && chatId && userId) {
+          // Add the selected response to the chat with score info
+          const scoreInfo = bestOptions.length > 1 
+            ? ` (Score: ${highestScore}/10 - tied with ${bestOptions.length - 1} other${bestOptions.length > 2 ? 's' : ''})`
+            : ` (Score: ${highestScore}/10)`;
+          
+          addMessageToChat(userId, chatId, "assistant", selectedOption.content + scoreInfo);
+          
+          // Update active chat
+          const updatedChat = getChat(userId, chatId);
+          if (updatedChat) {
+            setActiveChat(updatedChat);
+          }
+          
+          // Update chats list
+          const allChats = getAllChats(userId);
+          const chatArray = Object.values(allChats).sort(
+            (a, b) => b.updatedAt - a.updatedAt
+          );
+          setChats(chatArray);
+          
+          // Hide response options and clear scores
+          setShowResponseOptions(false);
+          setResponseOptions([]);
+          setScoredOptions(new Map());
+        }
+      }
+    },
+    [responseOptions, scoredOptions, responseMode, chatId, userId]
+  );
+  
+  // Select a response option (for manual mode)
+  const selectResponseOption = useCallback(
+    (optionId: string) => {
+      if (!chatId || !userId || !showResponseOptions || responseMode !== "manual") return;
+      
+      // Safe to use chatId at this point because we've checked it's not falsy
+      const selectedOption = responseOptions.find(option => option.id === optionId);
+      if (!selectedOption) return;
+      
+      // Add the selected response to the chat
+      addMessageToChat(userId, chatId, "assistant", selectedOption.content);
+      
+      // Update active chat
+      const updatedChat = getChat(userId, chatId);
+      if (updatedChat) {
+        setActiveChat(updatedChat);
+      }
+      
+      // Update chats list
+      const allChats = getAllChats(userId);
+      const chatArray = Object.values(allChats).sort(
+        (a, b) => b.updatedAt - a.updatedAt
+      );
+      setChats(chatArray);
+      
+      // Hide response options
+      setShowResponseOptions(false);
+      setResponseOptions([]);
+    },
+    [chatId, userId, showResponseOptions, responseOptions, responseMode]
+  );
+  
+  // Reset response options and scores when starting new interaction
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || isLoading || !userId) return;
       setIsLoading(true);
+      
+      // Clear previous scores
+      setScoredOptions(new Map());
       
       let currentChatId = chatId;
       
@@ -350,38 +452,6 @@ export const useChat = () => {
       setInputValue("");
     },
     [chatId, isLoading, router, userId, activeChat, fetchResponseOptions]
-  );
-  
-  // Select a response option
-  const selectResponseOption = useCallback(
-    (optionId: string) => {
-      if (!chatId || !userId || !showResponseOptions) return;
-      
-      // Safe to use chatId at this point because we've checked it's not falsy
-      const selectedOption = responseOptions.find(option => option.id === optionId);
-      if (!selectedOption) return;
-      
-      // Add the selected response to the chat
-      addMessageToChat(userId, chatId, "assistant", selectedOption.content);
-      
-      // Update active chat
-      const updatedChat = getChat(userId, chatId);
-      if (updatedChat) {
-        setActiveChat(updatedChat);
-      }
-      
-      // Update chats list
-      const allChats = getAllChats(userId);
-      const chatArray = Object.values(allChats).sort(
-        (a, b) => b.updatedAt - a.updatedAt
-      );
-      setChats(chatArray);
-      
-      // Hide response options
-      setShowResponseOptions(false);
-      setResponseOptions([]);
-    },
-    [chatId, userId, showResponseOptions, responseOptions]
   );
   
   // Delete a chat
@@ -425,5 +495,9 @@ export const useChat = () => {
     responseOptions,
     showResponseOptions,
     selectResponseOption,
+    responseMode,
+    setResponseMode,
+    scoreResponseOption,
+    scoredOptions,
   };
 }; 
