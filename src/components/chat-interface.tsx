@@ -5,7 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { cn } from "~/lib/utils";
-import { Send, Menu, Plus, LogOut, Trash2, User, Check, ToggleLeft, ToggleRight } from "lucide-react";
+import { Send, Menu, Plus, LogOut, Trash2, User, Check, ChevronUp, ChevronDown, Trophy } from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "~/components/ui/avatar";
@@ -29,6 +29,10 @@ export default function ChatInterface() {
     setResponseMode,
     scoreResponseOption,
     scoredOptions,
+    rankedOptions,
+    moveResponseUp,
+    moveResponseDown,
+    confirmRanking,
   } = useChat();
   
   const { data: session } = useSession();
@@ -64,7 +68,13 @@ export default function ChatInterface() {
   };
 
   const toggleResponseMode = () => {
-    setResponseMode(responseMode === "manual" ? "scoring" : "manual");
+    if (responseMode === "manual") {
+      setResponseMode("scoring");
+    } else if (responseMode === "scoring") {
+      setResponseMode("ranking");
+    } else {
+      setResponseMode("manual");
+    }
   };
 
   const handleScoreClick = (optionId: string, score: number) => {
@@ -76,6 +86,13 @@ export default function ChatInterface() {
   };
 
   const allOptionsScored = responseOptions.length > 0 && responseOptions.every(option => scoredOptions.has(option.id));
+
+  const getOrdinalSuffix = (num: number): string => {
+    if (num === 1) return "st";
+    if (num === 2) return "nd";
+    if (num === 3) return "rd";
+    return "th";
+  };
   
   return (
     <div className="flex h-screen bg-[#0f0f0f]">
@@ -162,7 +179,9 @@ export default function ChatInterface() {
           <div className="ml-auto flex items-center space-x-2">
             {/* Response Mode Toggle */}
             <div className="flex items-center gap-2 mr-4">
-              <span className="text-xs text-zinc-400">Manual</span>
+              <span className={cn("text-xs transition-colors", responseMode === "manual" ? "text-[#1a7f64]" : "text-zinc-400")}>
+                Manual
+              </span>
               <Button
                 variant="ghost"
                 size="icon"
@@ -170,12 +189,31 @@ export default function ChatInterface() {
                 className="h-8 w-8 transition-all duration-200 hover:scale-110"
               >
                 {responseMode === "manual" ? (
-                  <ToggleLeft className="h-5 w-5 text-zinc-400" />
+                  <div className="w-2 h-2 rounded-full bg-[#1a7f64]" />
+                ) : responseMode === "scoring" ? (
+                  <div className="w-2 h-2 rounded-full bg-orange-500" />
                 ) : (
-                  <ToggleRight className="h-5 w-5 text-[#1a7f64]" />
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
                 )}
               </Button>
-              <span className="text-xs text-zinc-400">Scoring</span>
+              <span className={cn("text-xs transition-colors", responseMode === "scoring" ? "text-orange-500" : "text-zinc-400")}>
+                Scoring
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleResponseMode}
+                className="h-8 w-8 transition-all duration-200 hover:scale-110"
+              >
+                {responseMode === "ranking" ? (
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
+                ) : (
+                  <div className="w-2 h-2 rounded-full bg-zinc-600" />
+                )}
+              </Button>
+              <span className={cn("text-xs transition-colors", responseMode === "ranking" ? "text-purple-500" : "text-zinc-400")}>
+                Ranking
+              </span>
             </div>
 
             {session?.user && (
@@ -229,14 +267,14 @@ export default function ChatInterface() {
                           remarkPlugins={[remarkGfm]}
                           components={{
                             // Add custom styling for markdown elements
-                            strong: ({node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
-                            h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
-                            h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
-                            h3: ({node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
-                            ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
-                            ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
-                            li: ({node, ...props}) => <li className="my-1" {...props} />,
-                            p: ({node, ...props}) => <p className="my-2" {...props} />,
+                            strong: ({node: _node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
+                            h1: ({node: _node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                            h2: ({node: _node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
+                            h3: ({node: _node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
+                            ul: ({node: _node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
+                            ol: ({node: _node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
+                            li: ({node: _node, ...props}) => <li className="my-1" {...props} />,
+                            p: ({node: _node, ...props}) => <p className="my-2" {...props} />,
                           }}
                         >
                           {message.content}
@@ -260,97 +298,195 @@ export default function ChatInterface() {
                     AI
                   </div>
                   <div className="flex flex-col space-y-3 w-full">
-                    {responseOptions.map((option, index) => (
-                      <div 
-                        key={option.id}
-                        className={cn(
-                          "bg-[#2a2a2a] px-4 py-3 rounded-xl transition-all duration-300 flex flex-col animate-in slide-in-from-left-2",
-                          responseMode === "manual" && "hover:bg-[#3a3a3a] cursor-pointer hover:scale-[1.01] hover:shadow-lg hover:shadow-[#1a7f64]/10 active:scale-[0.99]"
-                        )}
-                        style={{ animationDelay: `${index * 100}ms` }}
-                        onClick={responseMode === "manual" ? () => selectResponseOption(option.id) : undefined}
-                      >
-                        <div className="flex items-start">
-                          <div className="prose prose-invert max-w-none flex-1">
-                            {option.content.startsWith('API Raw Data:') ? (
-                              <pre className="text-xs overflow-auto max-h-[400px] p-2 bg-[#1e1e1e] rounded">
-                                {option.content.replace('API Raw Data: ', '')}
-                              </pre>
-                            ) : option.content.startsWith('Collection ') && option.content.includes(': Error') ? (
-                              <p>{option.content}</p>
-                            ) : (
-                              <ReactMarkdown 
-                                remarkPlugins={[remarkGfm]}
-                                components={{
-                                  // Add custom styling for markdown elements
-                                  strong: ({node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
-                                  h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
-                                  h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
-                                  h3: ({node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
-                                  ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
-                                  ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
-                                  li: ({node, ...props}) => <li className="my-1" {...props} />,
-                                  p: ({node, ...props}) => <p className="my-2" {...props} />,
-                                }}
-                              >
-                                {option.content}
-                              </ReactMarkdown>
+                    {/* Ranking Mode - Show responses in ranked order */}
+                    {responseMode === "ranking" ? (
+                      rankedOptions.map((optionId, index) => {
+                        const option = responseOptions.find(o => o.id === optionId);
+                        if (!option) return null;
+                        const rank = index + 1;
+                        
+                        return (
+                          <div 
+                            key={option.id}
+                            className="bg-[#2a2a2a] px-4 py-3 rounded-xl transition-all duration-300 flex flex-col animate-in slide-in-from-left-2 border-l-4"
+                            style={{ 
+                              animationDelay: `${index * 100}ms`,
+                              borderLeftColor: rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#4a4a4a'
+                            }}
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className={cn(
+                                  "flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold",
+                                  rank === 1 ? "bg-yellow-500 text-black" :
+                                  rank === 2 ? "bg-gray-400 text-black" :
+                                  rank === 3 ? "bg-amber-600 text-white" :
+                                  "bg-[#404040] text-zinc-300"
+                                )}>
+                                  {rank === 1 && <Trophy className="h-4 w-4" />}
+                                  {rank !== 1 && rank}
+                                </div>
+                                <span className="text-sm font-medium">
+                                  {rank}{getOrdinalSuffix(rank)} Place
+                                </span>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 transition-all duration-200 hover:scale-110 disabled:opacity-30"
+                                  onClick={() => moveResponseUp(option.id)}
+                                  disabled={index === 0}
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 transition-all duration-200 hover:scale-110 disabled:opacity-30"
+                                  onClick={() => moveResponseDown(option.id)}
+                                  disabled={index === rankedOptions.length - 1}
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            <div className="prose prose-invert max-w-none">
+                              {option.content.startsWith('API Raw Data:') ? (
+                                <pre className="text-xs overflow-auto max-h-[400px] p-2 bg-[#1e1e1e] rounded">
+                                  {option.content.replace('API Raw Data: ', '')}
+                                </pre>
+                              ) : option.content.startsWith('Collection ') && option.content.includes(': Error') ? (
+                                <p>{option.content}</p>
+                              ) : (
+                                <ReactMarkdown 
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                    strong: ({node: _node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
+                                    h1: ({node: _node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                                    h2: ({node: _node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
+                                    h3: ({node: _node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
+                                    ul: ({node: _node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
+                                    ol: ({node: _node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
+                                    li: ({node: _node, ...props}) => <li className="my-1" {...props} />,
+                                    p: ({node: _node, ...props}) => <p className="my-2" {...props} />,
+                                  }}
+                                >
+                                  {option.content}
+                                </ReactMarkdown>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      /* Manual and Scoring Modes - Show responses in original order */
+                      responseOptions.map((option, index) => (
+                        <div 
+                          key={option.id}
+                          className={cn(
+                            "bg-[#2a2a2a] px-4 py-3 rounded-xl transition-all duration-300 flex flex-col animate-in slide-in-from-left-2",
+                            responseMode === "manual" && "hover:bg-[#3a3a3a] cursor-pointer hover:scale-[1.01] hover:shadow-lg hover:shadow-[#1a7f64]/10 active:scale-[0.99]"
+                          )}
+                          style={{ animationDelay: `${index * 100}ms` }}
+                          onClick={responseMode === "manual" ? () => selectResponseOption(option.id) : undefined}
+                        >
+                          <div className="flex items-start">
+                            <div className="prose prose-invert max-w-none flex-1">
+                              {option.content.startsWith('API Raw Data:') ? (
+                                <pre className="text-xs overflow-auto max-h-[400px] p-2 bg-[#1e1e1e] rounded">
+                                  {option.content.replace('API Raw Data: ', '')}
+                                </pre>
+                              ) : option.content.startsWith('Collection ') && option.content.includes(': Error') ? (
+                                <p>{option.content}</p>
+                              ) : (
+                                <ReactMarkdown 
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                    strong: ({node: _node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
+                                    h1: ({node: _node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                                    h2: ({node: _node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
+                                    h3: ({node: _node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
+                                    ul: ({node: _node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
+                                    ol: ({node: _node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
+                                    li: ({node: _node, ...props}) => <li className="my-1" {...props} />,
+                                    p: ({node: _node, ...props}) => <p className="my-2" {...props} />,
+                                  }}
+                                >
+                                  {option.content}
+                                </ReactMarkdown>
+                              )}
+                            </div>
+                            {responseMode === "manual" && (
+                              <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 ml-2 mt-1 transform group-hover:scale-110">
+                                <Check className="h-4 w-4 text-[#1a7f64]" />
+                              </div>
                             )}
                           </div>
-                          {responseMode === "manual" && (
-                            <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 ml-2 mt-1 transform group-hover:scale-110">
-                              <Check className="h-4 w-4 text-[#1a7f64]" />
+                          
+                          {/* Scoring Interface */}
+                          {responseMode === "scoring" && (
+                            <div className="mt-3 pt-3 border-t border-[#3a3a3a]">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs text-zinc-400">Rate this response (1-10):</span>
+                                {getScoreForOption(option.id) && (
+                                  <span className="text-xs font-medium text-[#1a7f64]">
+                                    Scored: {getScoreForOption(option.id)}/10
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex gap-1 flex-wrap">
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => {
+                                  const isSelected = getScoreForOption(option.id) === score;
+                                  return (
+                                    <Button
+                                      key={score}
+                                      variant="ghost"
+                                      size="sm"
+                                      className={cn(
+                                        "h-8 w-8 p-0 text-xs transition-all duration-200 hover:scale-110 active:scale-95",
+                                        isSelected 
+                                          ? "bg-[#1a7f64] text-white hover:bg-[#18735a]" 
+                                          : "bg-[#1a1a1a] hover:bg-[#2a2a2a] text-zinc-300"
+                                      )}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleScoreClick(option.id, score);
+                                      }}
+                                    >
+                                      {score}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>
-                        
-                        {/* Scoring Interface */}
-                        {responseMode === "scoring" && (
-                          <div className="mt-3 pt-3 border-t border-[#3a3a3a]">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-zinc-400">Rate this response (1-10):</span>
-                              {getScoreForOption(option.id) && (
-                                <span className="text-xs font-medium text-[#1a7f64]">
-                                  Scored: {getScoreForOption(option.id)}/10
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex gap-1 flex-wrap">
-                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => {
-                                const isSelected = getScoreForOption(option.id) === score;
-                                return (
-                                  <Button
-                                    key={score}
-                                    variant="ghost"
-                                    size="sm"
-                                    className={cn(
-                                      "h-8 w-8 p-0 text-xs transition-all duration-200 hover:scale-110 active:scale-95",
-                                      isSelected 
-                                        ? "bg-[#1a7f64] text-white hover:bg-[#18735a]" 
-                                        : "bg-[#1a1a1a] hover:bg-[#2a2a2a] text-zinc-300"
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleScoreClick(option.id, score);
-                                    }}
-                                  >
-                                    {score}
-                                  </Button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      ))
+                    )}
                     
-                    <div className="text-xs text-zinc-500 italic mt-1 pl-1 animate-in fade-in duration-1000">
-                      {responseMode === "manual" 
-                        ? "Choose one of the responses above" 
-                        : allOptionsScored 
-                          ? "All responses scored! The highest scored response will be automatically selected."
-                          : "Score each response from 1-10. The highest scored response will be automatically selected."
-                      }
+                    {/* Action buttons and instructions */}
+                    <div className="flex flex-col gap-2">
+                      {responseMode === "ranking" && rankedOptions.length > 0 && (
+                        <Button
+                          onClick={confirmRanking}
+                          className="bg-[#1a7f64] hover:bg-[#18735a] transition-all duration-200 hover:scale-105 hover:shadow-lg"
+                        >
+                          Select Top Ranked Response
+                        </Button>
+                      )}
+                      
+                      <div className="text-xs text-zinc-500 italic pl-1 animate-in fade-in duration-1000">
+                        {responseMode === "manual" 
+                          ? "Choose one of the responses above" 
+                          : responseMode === "scoring"
+                          ? allOptionsScored 
+                            ? "All responses scored! The highest scored response will be automatically selected."
+                            : "Score each response from 1-10. The highest scored response will be automatically selected."
+                          : "Use the arrows to rank responses from best (1st) to worst. The top-ranked response will be selected."
+                        }
+                      </div>
                     </div>
                   </div>
                 </div>

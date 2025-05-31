@@ -19,7 +19,7 @@ export type ResponseOption = {
   score?: number;
 };
 
-export type ResponseMode = "manual" | "scoring";
+export type ResponseMode = "manual" | "scoring" | "ranking";
 
 // API configuration
 const API_CONFIG = {
@@ -57,6 +57,7 @@ export const useChat = () => {
   const [showResponseOptions, setShowResponseOptions] = useState(false);
   const [responseMode, setResponseMode] = useState<ResponseMode>("manual");
   const [scoredOptions, setScoredOptions] = useState<Map<string, number>>(new Map());
+  const [rankedOptions, setRankedOptions] = useState<string[]>([]);
   
   // Track if initial load has happened
   const initialLoadComplete = useRef(false);
@@ -384,11 +385,11 @@ export const useChat = () => {
       const selectedOption = responseOptions.find(option => option.id === optionId);
       if (!selectedOption) return;
       
-      // Add the selected response to the chat
-      addMessageToChat(userId, chatId, "assistant", selectedOption.content);
+      // Add the selected response to the chat - chatId is guaranteed to be string here
+      addMessageToChat(userId, chatId as string, "assistant", selectedOption.content);
       
       // Update active chat
-      const updatedChat = getChat(userId, chatId);
+      const updatedChat = getChat(userId, chatId as string);
       if (updatedChat) {
         setActiveChat(updatedChat);
       }
@@ -407,14 +408,95 @@ export const useChat = () => {
     [chatId, userId, showResponseOptions, responseOptions, responseMode]
   );
   
+  // Rank response options
+  const moveResponseUp = useCallback(
+    (optionId: string) => {
+      setRankedOptions(prev => {
+        const currentIndex = prev.indexOf(optionId);
+        if (currentIndex <= 0) return prev; // Already at top or not found
+        
+        const newRanked = [...prev];
+        // Safe to use non-null assertion since we've checked bounds
+        const temp = newRanked[currentIndex]!;
+        newRanked[currentIndex] = newRanked[currentIndex - 1]!;
+        newRanked[currentIndex - 1] = temp;
+        return newRanked;
+      });
+    },
+    []
+  );
+
+  const moveResponseDown = useCallback(
+    (optionId: string) => {
+      setRankedOptions(prev => {
+        const currentIndex = prev.indexOf(optionId);
+        if (currentIndex >= prev.length - 1 || currentIndex === -1) return prev; // Already at bottom or not found
+        
+        const newRanked = [...prev];
+        // Safe to use non-null assertion since we've checked bounds
+        const temp = newRanked[currentIndex]!;
+        newRanked[currentIndex] = newRanked[currentIndex + 1]!;
+        newRanked[currentIndex + 1] = temp;
+        return newRanked;
+      });
+    },
+    []
+  );
+
+  const confirmRanking = useCallback(() => {
+    if (rankedOptions.length === 0 || !chatId || !userId) return;
+
+    // Get the top-ranked response
+    const topRankedId = rankedOptions[0];
+    const topRankedOption = responseOptions.find(option => option.id === topRankedId);
+    
+    if (topRankedOption && chatId && userId) {
+      // Add ranking information to the response
+      const rankingInfo = ` (Ranked 1st out of ${rankedOptions.length} responses)`;
+      
+      addMessageToChat(userId, chatId as string, "assistant", topRankedOption.content + rankingInfo);
+      
+      // Update active chat
+      const updatedChat = getChat(userId, chatId as string);
+      if (updatedChat) {
+        setActiveChat(updatedChat);
+      }
+      
+      // Update chats list
+      const allChats = getAllChats(userId);
+      const chatArray = Object.values(allChats).sort(
+        (a, b) => b.updatedAt - a.updatedAt
+      );
+      setChats(chatArray);
+      
+      // Hide response options and clear ranking
+      setShowResponseOptions(false);
+      setResponseOptions([]);
+      setRankedOptions([]);
+    }
+  }, [rankedOptions, responseOptions, chatId, userId]);
+
+  // Initialize ranking when switching to ranking mode
+  const initializeRanking = useCallback(() => {
+    if (responseMode === "ranking" && responseOptions.length > 0 && rankedOptions.length === 0) {
+      setRankedOptions(responseOptions.map(option => option.id));
+    }
+  }, [responseMode, responseOptions, rankedOptions]);
+
+  // Effect to initialize ranking
+  useEffect(() => {
+    initializeRanking();
+  }, [initializeRanking]);
+  
   // Reset response options and scores when starting new interaction
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || isLoading || !userId) return;
       setIsLoading(true);
       
-      // Clear previous scores
+      // Clear previous scores and rankings
       setScoredOptions(new Map());
+      setRankedOptions([]);
       
       let currentChatId = chatId;
       
@@ -499,5 +581,9 @@ export const useChat = () => {
     setResponseMode,
     scoreResponseOption,
     scoredOptions,
+    rankedOptions,
+    moveResponseUp,
+    moveResponseDown,
+    confirmRanking,
   };
 }; 
