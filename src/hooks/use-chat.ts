@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import { useSession } from "next-auth/react";
@@ -33,14 +33,38 @@ const OPENROUTER_CONFIG = {
   url: "https://openrouter.ai/api/v1/chat/completions",
   model: "openai/gpt-3.5-turbo", // Default model
   // Use environment variable for the API key
-  apiKey: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || ""
+  apiKey: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ?? ""
 };
 
 // For debugging
-const logApiRequest = (url: string, payload: any) => {
+const logApiRequest = (url: string, payload: Record<string, unknown>) => {
   console.log(`Sending request to: ${url}`);
   console.log('Request payload:', JSON.stringify(payload, null, 2));
 };
+
+// Type definitions for API responses
+interface CollectionResult {
+  results?: Array<{
+    metadata?: {
+      content?: string;
+    };
+  }>;
+  error?: string;
+}
+
+interface ApiResponse {
+  collection_results?: Record<string, CollectionResult>;
+}
+
+interface OpenRouterChoice {
+  message?: {
+    content?: string;
+  };
+}
+
+interface OpenRouterResponse {
+  choices?: OpenRouterChoice[];
+}
 
 export const useChat = () => {
   const router = useRouter();
@@ -169,45 +193,33 @@ export const useChat = () => {
         ];
       }
       
-      const data = await response.json();
+      const data = await response.json() as ApiResponse;
       console.log('API response data:', data);
       
       // Extract content fields from each collection
-      const contentByCollection: Record<string, any> = {};
       const responseOptions: ResponseOption[] = [];
       
       if (data.collection_results) {
         // Iterate through each collection
         for (const [collectionName, collectionData] of Object.entries(data.collection_results)) {
           // Skip collections with errors
-          if (typeof collectionData === 'object' && collectionData !== null && 'error' in collectionData) {
-            contentByCollection[collectionName] = { error: (collectionData as { error: string }).error };
+          if (collectionData && 'error' in collectionData && collectionData.error) {
             // Add an error option for this collection
             responseOptions.push({
               id: uuidv4(),
-              content: `Collection ${collectionName}: Error - ${(collectionData as { error: string }).error}`
+              content: `Collection ${collectionName}: Error - ${collectionData.error}`
             });
             continue;
           }
           
           // Get contents from results if they exist
-          if (
-            typeof collectionData === 'object' && 
-            collectionData !== null && 
-            'results' in collectionData && 
-            Array.isArray((collectionData as { results: any[] }).results)
-          ) {
-            const contents = ((collectionData as { results: any[] }).results)
-              .map((result: any) => {
+          if (collectionData?.results && Array.isArray(collectionData.results)) {
+            const contents = collectionData.results
+              .map((result) => {
                 // Extract content from metadata if it exists
-                if (result.metadata && result.metadata.content) {
-                  return result.metadata.content;
-                }
-                return null;
+                return result.metadata?.content ?? null;
               })
-              .filter((content: any) => content !== null); // Remove null entries
-            
-            contentByCollection[collectionName] = contents;
+              .filter((content): content is string => content !== null); // Type guard to filter nulls
             
             // Process this collection with OpenRouter
             if (contents.length > 0) {
@@ -231,7 +243,6 @@ export const useChat = () => {
               });
             }
           } else {
-            contentByCollection[collectionName] = [];
             responseOptions.push({
               id: uuidv4(),
               content: `Collection ${collectionName}: No results found`
@@ -303,17 +314,97 @@ export const useChat = () => {
       throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
     }
     
-    const result = await response.json();
+    const result = await response.json() as OpenRouterResponse;
     console.log(`OpenRouter response (collection: ${collectionName}):`, result);
     
     // Extract the assistant's response
-    if (result.choices && result.choices.length > 0 && result.choices[0].message) {
+    if (result.choices?.[0]?.message?.content) {
       return result.choices[0].message.content;
     }
     
     return "No response received from OpenRouter.";
   };
   
+  // Rank response options
+  const moveResponseUp = useCallback(
+    (optionId: string) => {
+      setRankedOptions(prev => {
+        const currentIndex = prev.indexOf(optionId);
+        if (currentIndex <= 0) return prev; // Already at top or not found
+        
+        const newRanked = [...prev];
+        // Safe to use non-null assertion since we've checked bounds
+        const temp = newRanked[currentIndex]!;
+        newRanked[currentIndex] = newRanked[currentIndex - 1]!;
+        newRanked[currentIndex - 1] = temp;
+        return newRanked;
+      });
+    },
+    []
+  );
+
+  const moveResponseDown = useCallback(
+    (optionId: string) => {
+      setRankedOptions(prev => {
+        const currentIndex = prev.indexOf(optionId);
+        if (currentIndex >= prev.length - 1 || currentIndex === -1) return prev; // Already at bottom or not found
+        
+        const newRanked = [...prev];
+        // Safe to use non-null assertion since we've checked bounds
+        const temp = newRanked[currentIndex]!;
+        newRanked[currentIndex] = newRanked[currentIndex + 1]!;
+        newRanked[currentIndex + 1] = temp;
+        return newRanked;
+      });
+    },
+    []
+  );
+
+  const confirmRanking = useCallback(() => {
+    if (rankedOptions.length === 0 || !chatId || !userId) return;
+
+    // Get the top-ranked response
+    const topRankedId = rankedOptions[0];
+    const topRankedOption = responseOptions.find(option => option.id === topRankedId);
+    
+    if (topRankedOption && chatId && userId) {
+      // Add ranking information to the response
+      const rankingInfo = ` (Ranked 1st out of ${rankedOptions.length} responses)`;
+      
+      addMessageToChat(userId, chatId, "assistant", topRankedOption.content + rankingInfo);
+      
+      // Update active chat
+      const updatedChat = getChat(userId, chatId);
+      if (updatedChat) {
+        setActiveChat(updatedChat);
+      }
+      
+      // Update chats list
+      const allChats = getAllChats(userId);
+      const chatArray = Object.values(allChats).sort(
+        (a, b) => b.updatedAt - a.updatedAt
+      );
+      setChats(chatArray);
+      
+      // Hide response options and clear ranking
+      setShowResponseOptions(false);
+      setResponseOptions([]);
+      setRankedOptions([]);
+    }
+  }, [rankedOptions, responseOptions, chatId, userId]);
+
+  // Initialize ranking when switching to ranking mode
+  const initializeRanking = useCallback(() => {
+    if (responseMode === "ranking" && responseOptions.length > 0 && rankedOptions.length === 0) {
+      setRankedOptions(responseOptions.map(option => option.id));
+    }
+  }, [responseMode, responseOptions, rankedOptions]);
+
+  // Effect to initialize ranking
+  useEffect(() => {
+    initializeRanking();
+  }, [initializeRanking]);
+
   // Score a response option
   const scoreResponseOption = useCallback(
     (optionId: string, score: number) => {
@@ -333,7 +424,7 @@ export const useChat = () => {
         let bestOptions: ResponseOption[] = [];
         
         responseOptions.forEach(option => {
-          const optionScore = scores.get(option.id) || 0;
+          const optionScore = scores.get(option.id) ?? 0;
           if (optionScore > highestScore) {
             highestScore = optionScore;
             bestOptions = [option];
@@ -386,10 +477,10 @@ export const useChat = () => {
       if (!selectedOption) return;
       
       // Add the selected response to the chat - chatId is guaranteed to be string here
-      addMessageToChat(userId, chatId as string, "assistant", selectedOption.content);
+      addMessageToChat(userId, chatId, "assistant", selectedOption.content);
       
       // Update active chat
-      const updatedChat = getChat(userId, chatId as string);
+      const updatedChat = getChat(userId, chatId);
       if (updatedChat) {
         setActiveChat(updatedChat);
       }
@@ -407,86 +498,6 @@ export const useChat = () => {
     },
     [chatId, userId, showResponseOptions, responseOptions, responseMode]
   );
-  
-  // Rank response options
-  const moveResponseUp = useCallback(
-    (optionId: string) => {
-      setRankedOptions(prev => {
-        const currentIndex = prev.indexOf(optionId);
-        if (currentIndex <= 0) return prev; // Already at top or not found
-        
-        const newRanked = [...prev];
-        // Safe to use non-null assertion since we've checked bounds
-        const temp = newRanked[currentIndex]!;
-        newRanked[currentIndex] = newRanked[currentIndex - 1]!;
-        newRanked[currentIndex - 1] = temp;
-        return newRanked;
-      });
-    },
-    []
-  );
-
-  const moveResponseDown = useCallback(
-    (optionId: string) => {
-      setRankedOptions(prev => {
-        const currentIndex = prev.indexOf(optionId);
-        if (currentIndex >= prev.length - 1 || currentIndex === -1) return prev; // Already at bottom or not found
-        
-        const newRanked = [...prev];
-        // Safe to use non-null assertion since we've checked bounds
-        const temp = newRanked[currentIndex]!;
-        newRanked[currentIndex] = newRanked[currentIndex + 1]!;
-        newRanked[currentIndex + 1] = temp;
-        return newRanked;
-      });
-    },
-    []
-  );
-
-  const confirmRanking = useCallback(() => {
-    if (rankedOptions.length === 0 || !chatId || !userId) return;
-
-    // Get the top-ranked response
-    const topRankedId = rankedOptions[0];
-    const topRankedOption = responseOptions.find(option => option.id === topRankedId);
-    
-    if (topRankedOption && chatId && userId) {
-      // Add ranking information to the response
-      const rankingInfo = ` (Ranked 1st out of ${rankedOptions.length} responses)`;
-      
-      addMessageToChat(userId, chatId as string, "assistant", topRankedOption.content + rankingInfo);
-      
-      // Update active chat
-      const updatedChat = getChat(userId, chatId as string);
-      if (updatedChat) {
-        setActiveChat(updatedChat);
-      }
-      
-      // Update chats list
-      const allChats = getAllChats(userId);
-      const chatArray = Object.values(allChats).sort(
-        (a, b) => b.updatedAt - a.updatedAt
-      );
-      setChats(chatArray);
-      
-      // Hide response options and clear ranking
-      setShowResponseOptions(false);
-      setResponseOptions([]);
-      setRankedOptions([]);
-    }
-  }, [rankedOptions, responseOptions, chatId, userId]);
-
-  // Initialize ranking when switching to ranking mode
-  const initializeRanking = useCallback(() => {
-    if (responseMode === "ranking" && responseOptions.length > 0 && rankedOptions.length === 0) {
-      setRankedOptions(responseOptions.map(option => option.id));
-    }
-  }, [responseMode, responseOptions, rankedOptions]);
-
-  // Effect to initialize ranking
-  useEffect(() => {
-    initializeRanking();
-  }, [initializeRanking]);
   
   // Reset response options and scores when starting new interaction
   const sendMessage = useCallback(
