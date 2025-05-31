@@ -179,7 +179,10 @@ export default function ChatInterface() {
           <div className="ml-auto flex items-center space-x-2">
             {/* Response Mode Toggle */}
             <div className="flex items-center gap-2 mr-4">
-              <span className={cn("text-xs transition-colors", responseMode === "manual" ? "text-[#1a7f64]" : "text-zinc-400")}>
+              <span 
+                className={cn("text-xs transition-colors cursor-pointer hover:opacity-80", responseMode === "manual" ? "text-[#1a7f64]" : "text-zinc-400")}
+                onClick={() => setResponseMode("manual")}
+              >
                 Manual
               </span>
               <Button
@@ -196,7 +199,10 @@ export default function ChatInterface() {
                   <div className="w-2 h-2 rounded-full bg-purple-500" />
                 )}
               </Button>
-              <span className={cn("text-xs transition-colors", responseMode === "scoring" ? "text-orange-500" : "text-zinc-400")}>
+              <span 
+                className={cn("text-xs transition-colors cursor-pointer hover:opacity-80", responseMode === "scoring" ? "text-orange-500" : "text-zinc-400")}
+                onClick={() => setResponseMode("scoring")}
+              >
                 Scoring
               </span>
               <Button
@@ -211,7 +217,10 @@ export default function ChatInterface() {
                   <div className="w-2 h-2 rounded-full bg-zinc-600" />
                 )}
               </Button>
-              <span className={cn("text-xs transition-colors", responseMode === "ranking" ? "text-purple-500" : "text-zinc-400")}>
+              <span 
+                className={cn("text-xs transition-colors cursor-pointer hover:opacity-80", responseMode === "ranking" ? "text-purple-500" : "text-zinc-400")}
+                onClick={() => setResponseMode("ranking")}
+              >
                 Ranking
               </span>
             </div>
