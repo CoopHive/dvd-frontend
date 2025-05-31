@@ -124,16 +124,17 @@ export const useChat = () => {
         const chat = getChat(userId, chatId);
         if (chat) {
           setActiveChat(chat);
+        } else {
+          // Chat not found, redirect to home but don't auto-create
+          router.push("/");
         }
-      } else if (chatArray.length > 0 && chatArray[0]) {
-        // If no chat is active but we have chats, select the most recent one
-        // Do not navigate here to avoid loops
-        setActiveChat(chatArray[0]);
       }
+      // Don't automatically select a chat if no chatId is specified
+      // This allows for a state with no active chat
       
       initialLoadComplete.current = true;
     }
-  }, [userId, chatId]);
+  }, [userId, chatId, router]);
   
   // Update chats when userId or chatId changes
   useEffect(() => {
@@ -561,11 +562,23 @@ export const useChat = () => {
       );
       setChats(chatArray);
       
-      // If active chat is deleted, set to null
+      // If active chat is deleted
       if (activeChat?.id === id) {
-        setActiveChat(null);
-        // Navigate to home
-        router.push("/");
+        // If there are other chats, select the most recent one
+        if (chatArray.length > 0) {
+          const nextChat = chatArray[0];
+          if (nextChat) {
+            setActiveChat(nextChat);
+            router.push(`/chat/${nextChat.id}`);
+          } else {
+            setActiveChat(null);
+            router.push("/");
+          }
+        } else {
+          // No chats left, clear active chat and go to empty state
+          setActiveChat(null);
+          router.push("/");
+        }
       }
     },
     [activeChat, router, userId]

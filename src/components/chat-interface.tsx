@@ -11,6 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "~/components/ui/avatar";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useRouter } from "next/navigation";
 
 export default function ChatInterface() {
   const {
@@ -39,6 +40,7 @@ export default function ChatInterface() {
   const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   
   // Auto-scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -63,8 +65,7 @@ export default function ChatInterface() {
   };
 
   const navigateToChat = (chatId: string) => {
-    window.history.pushState({}, "", `/chat/${chatId}`);
-    window.location.reload();
+    router.push(`/chat/${chatId}`);
   };
 
   const toggleResponseMode = () => {
@@ -524,10 +525,19 @@ export default function ChatInterface() {
               )}
               
               {/* If no messages */}
-              {activeChat?.messages?.length === 0 && !isLoading && !showResponseOptions && (
+              {(!activeChat || activeChat?.messages?.length === 0) && !isLoading && !showResponseOptions && (
                 <div className="flex flex-col items-center justify-center py-12 animate-in fade-in duration-1000">
-                  <h2 className="text-xl font-medium">Start a new conversation</h2>
-                  <p className="text-zinc-400 mt-2">Send a message to get started</p>
+                  {!activeChat ? (
+                    <>
+                      <h2 className="text-xl font-medium">Welcome to your Chat</h2>
+                      <p className="text-zinc-400 mt-2">Create a new chat to get started</p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-xl font-medium">Start a new conversation</h2>
+                      <p className="text-zinc-400 mt-2">Send a message to get started</p>
+                    </>
+                  )}
                 </div>
               )}
               
