@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { signOut, useSession } from "next-auth/react"; 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -29,6 +29,17 @@ export default function ChatInterface() {
   
   const { data: session } = useSession();
   const [showSidebar, setShowSidebar] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Auto-scroll to bottom when messages change
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [activeChat?.messages, responseOptions, isLoading]);
   
   const toggleSidebar = () => {
     setShowSidebar((prev) => !prev);
@@ -57,10 +68,10 @@ export default function ChatInterface() {
             <div className="p-4">
               <Button
                 variant="outline"
-                className="w-full justify-start gap-2 bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300"
+                className="w-full justify-start gap-2 bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] transform"
                 onClick={startNewChat}
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4 transition-transform duration-200 group-hover:rotate-90" />
                 New Chat
               </Button>
             </div>
@@ -71,12 +82,12 @@ export default function ChatInterface() {
                   <div
                     key={chat.id}
                     className={cn(
-                      "flex items-center group rounded-md hover:bg-[#2a2a2a] transition-colors",
-                      activeChat?.id === chat.id && "bg-[#2a2a2a]"
+                      "flex items-center group rounded-md hover:bg-[#2a2a2a] transition-all duration-200 hover:scale-[1.01] transform",
+                      activeChat?.id === chat.id && "bg-[#2a2a2a] shadow-sm"
                     )}
                   >
                     <div 
-                      className="flex-1 py-2 px-3 cursor-pointer"
+                      className="flex-1 py-2 px-3 cursor-pointer transition-all duration-150 hover:translate-x-1"
                       onClick={() => navigateToChat(chat.id)}
                     >
                       <div className="truncate">
@@ -89,10 +100,10 @@ export default function ChatInterface() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="opacity-0 group-hover:opacity-100 h-8 w-8 ml-1 mr-1"
+                      className="opacity-0 group-hover:opacity-100 h-8 w-8 ml-1 mr-1 transition-all duration-200 hover:bg-red-500/20 hover:text-red-400 hover:scale-110 active:scale-95"
                       onClick={() => removeChat(chat.id)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5 transition-transform duration-200 hover:rotate-12" />
                       <span className="sr-only">Delete</span>
                     </Button>
                   </div>
@@ -103,10 +114,10 @@ export default function ChatInterface() {
             <div className="p-4 border-t border-[#2a2a2a]">
               <Button
                 variant="ghost"
-                className="w-full justify-start text-sm gap-2"
+                className="w-full justify-start text-sm gap-2 transition-all duration-200 hover:bg-red-500/10 hover:text-red-400 hover:scale-[1.02] active:scale-[0.98]"
                 onClick={handleSignOut}
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4 transition-transform duration-200 hover:-translate-x-1" />
                 Sign Out
               </Button>
             </div>
@@ -122,9 +133,9 @@ export default function ChatInterface() {
             variant="ghost"
             size="icon"
             onClick={toggleSidebar}
-            className="mr-2"
+            className="mr-2 transition-all duration-200 hover:bg-[#2a2a2a] hover:scale-110 active:scale-95"
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-5 w-5 transition-transform duration-200 hover:rotate-180" />
             <span className="sr-only">Toggle Sidebar</span>
           </Button>
           <h1 className="font-medium text-sm">
@@ -132,8 +143,8 @@ export default function ChatInterface() {
           </h1>
           <div className="ml-auto flex items-center space-x-2">
             {session?.user && (
-              <div className="flex items-center mr-4">
-                <Avatar className="h-7 w-7 mr-2">
+              <div className="flex items-center mr-4 transition-all duration-200 hover:scale-105">
+                <Avatar className="h-7 w-7 mr-2 transition-all duration-200 hover:scale-110">
                   {session.user.image ? (
                     <AvatarImage src={session.user.image} alt={session.user.name ?? 'User'} />
                   ) : (
@@ -151,30 +162,30 @@ export default function ChatInterface() {
               variant="outline"
               size="sm"
               onClick={startNewChat}
-              className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300"
+              className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 group"
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <Plus className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:rotate-90" />
               New Chat
             </Button>
           </div>
         </header>
         
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col bg-[#0a0a0a]">
+        <div className="flex-1 flex flex-col bg-[#0a0a0a] overflow-hidden">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto py-6 px-4 lg:px-16">
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto py-6 px-4 lg:px-16">
             <div className="max-w-3xl mx-auto space-y-8">
               {activeChat?.messages?.map((message) => (
                 <div
                   key={message.id}
                   className={cn(
-                    "group",
+                    "group animate-in slide-in-from-bottom-2 duration-500",
                     message.role === "user" ? "text-right" : ""
                   )}
                 >
                   {message.role === "assistant" ? (
                     <div className="flex items-start">
-                      <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium">
+                      <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-[#1a7f64]/30">
                         AI
                       </div>
                       <div className="prose prose-invert max-w-none">
@@ -198,7 +209,7 @@ export default function ChatInterface() {
                     </div>
                   ) : (
                     <div className="text-right">
-                      <div className="inline-block bg-[#343541] px-4 py-2 rounded-2xl text-left">
+                      <div className="inline-block bg-[#343541] px-4 py-2 rounded-2xl text-left transition-all duration-200 hover:bg-[#404150] hover:scale-[1.02]">
                         {message.content}
                       </div>
                     </div>
@@ -208,15 +219,16 @@ export default function ChatInterface() {
               
               {/* AI Response Options */}
               {showResponseOptions && responseOptions.length > 0 && (
-                <div className="flex items-start">
-                  <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium">
+                <div className="flex items-start animate-in slide-in-from-bottom-4 duration-700">
+                  <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-[#1a7f64]/30">
                     AI
                   </div>
                   <div className="flex flex-col space-y-3 w-full">
-                    {responseOptions.map((option) => (
+                    {responseOptions.map((option, index) => (
                       <div 
                         key={option.id}
-                        className="bg-[#2a2a2a] hover:bg-[#3a3a3a] px-4 py-3 rounded-xl cursor-pointer transition-colors flex items-start group"
+                        className="bg-[#2a2a2a] hover:bg-[#3a3a3a] px-4 py-3 rounded-xl cursor-pointer transition-all duration-300 flex items-start group hover:scale-[1.01] hover:shadow-lg hover:shadow-[#1a7f64]/10 active:scale-[0.99] animate-in slide-in-from-left-2"
+                        style={{ animationDelay: `${index * 100}ms` }}
                         onClick={() => selectResponseOption(option.id)}
                       >
                         <div className="prose prose-invert max-w-none flex-1">
@@ -245,12 +257,12 @@ export default function ChatInterface() {
                             </ReactMarkdown>
                           )}
                         </div>
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 mt-1">
+                        <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 ml-2 mt-1 transform group-hover:scale-110">
                           <Check className="h-4 w-4 text-[#1a7f64]" />
                         </div>
                       </div>
                     ))}
-                    <div className="text-xs text-zinc-500 italic mt-1 pl-1">
+                    <div className="text-xs text-zinc-500 italic mt-1 pl-1 animate-in fade-in duration-1000">
                       Choose one of the responses above
                     </div>
                   </div>
@@ -258,8 +270,8 @@ export default function ChatInterface() {
               )}
               
               {isLoading && (
-                <div className="flex items-start">
-                  <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium">
+                <div className="flex items-start animate-in slide-in-from-bottom-2 duration-500">
+                  <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium animate-pulse">
                     AI
                   </div>
                   <div className="flex space-x-2">
@@ -281,11 +293,14 @@ export default function ChatInterface() {
               
               {/* If no messages */}
               {activeChat?.messages?.length === 0 && !isLoading && !showResponseOptions && (
-                <div className="flex flex-col items-center justify-center py-12">
+                <div className="flex flex-col items-center justify-center py-12 animate-in fade-in duration-1000">
                   <h2 className="text-xl font-medium">Start a new conversation</h2>
                   <p className="text-zinc-400 mt-2">Send a message to get started</p>
                 </div>
               )}
+              
+              {/* Auto-scroll anchor */}
+              <div ref={messagesEndRef} />
             </div>
           </div>
           
@@ -299,18 +314,18 @@ export default function ChatInterface() {
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     placeholder="Send a message..."
-                    className="py-6 px-5 pr-12 bg-[#2a2a2a] text-[#ececf1] border-none rounded-2xl focus-visible:ring-1 focus-visible:ring-[#1a7f64] focus-visible:ring-offset-0 h-auto text-sm shadow-inner"
+                    className="py-6 px-5 pr-12 bg-[#2a2a2a] text-[#ececf1] border-none rounded-2xl focus-visible:ring-1 focus-visible:ring-[#1a7f64] focus-visible:ring-offset-0 h-auto text-sm shadow-inner transition-all duration-200 focus:scale-[1.01] focus:shadow-lg focus:shadow-[#1a7f64]/20"
                     disabled={isLoading || showResponseOptions}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#2d2d2d] to-[#2a2a2a] rounded-2xl opacity-30 pointer-events-none"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#2d2d2d] to-[#2a2a2a] rounded-2xl opacity-30 pointer-events-none transition-opacity duration-200"></div>
                 </div>
                 <Button
                   type="submit"
                   size="icon"
                   disabled={!inputValue.trim() || isLoading || showResponseOptions}
-                  className="bg-[#1a7f64] hover:bg-[#18735a] rounded-full h-12 w-12 shadow-md"
+                  className="bg-[#1a7f64] hover:bg-[#18735a] rounded-full h-12 w-12 shadow-md transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-[#1a7f64]/40 active:scale-95 disabled:opacity-50 disabled:hover:scale-100 group"
                 >
-                  <Send className="h-5 w-5" />
+                  <Send className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                   <span className="sr-only">Send</span>
                 </Button>
               </form>
