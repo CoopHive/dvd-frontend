@@ -23,7 +23,7 @@ export type ResponseMode = "manual" | "scoring" | "ranking";
 
 // API configuration
 const API_CONFIG = {
-  url: "http://localhost:3001/api/evaluate",
+  url: "http://38.70.220.253:3001/api/evaluate",
   collections: ["openai_paragraph_openai", "openai_fixed_length_openai"],
   model: "openai/gpt-3.5-turbo-0613"
 };
