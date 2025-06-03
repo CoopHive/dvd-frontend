@@ -1,11 +1,22 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { signOut, useSession } from "next-auth/react"; 
+import { signOut, useSession } from "next-auth/react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { cn } from "~/lib/utils";
-import { Send, Menu, Plus, LogOut, Trash2, User, Check, ChevronUp, ChevronDown, Trophy } from "lucide-react";
+import {
+  Send,
+  Menu,
+  Plus,
+  LogOut,
+  Trash2,
+  User,
+  Check,
+  ChevronUp,
+  ChevronDown,
+  Trophy,
+} from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "~/components/ui/avatar";
@@ -34,15 +45,18 @@ export default function ChatInterface() {
     moveResponseUp,
     moveResponseDown,
     confirmRanking,
+    // Pull in the new dropdown state and setter:
+    openRouterModel,
+    setOpenRouterModel,
   } = useChat();
-  
+
   const { data: session } = useSession();
   const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  
-  // Auto-scroll to bottom when messages change
+
+  // Auto-scroll logic
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -50,16 +64,16 @@ export default function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [activeChat?.messages, responseOptions, isLoading]);
-  
+
   const toggleSidebar = () => {
     setShowSidebar((prev) => !prev);
   };
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     void sendMessage(inputValue);
   };
-  
+
   const handleSignOut = async () => {
     await signOut({ callbackUrl: "/auth/signin" });
   };
@@ -68,36 +82,20 @@ export default function ChatInterface() {
     router.push(`/chat/${chatId}`);
   };
 
-  const toggleResponseMode = () => {
-    if (responseMode === "manual") {
-      setResponseMode("scoring");
-    } else if (responseMode === "scoring") {
-      setResponseMode("ranking");
-    } else {
-      setResponseMode("manual");
-    }
-  };
-
-  const handleScoreClick = (optionId: string, score: number) => {
-    scoreResponseOption(optionId, score);
-  };
-
-  const getScoreForOption = (optionId: string): number | undefined => {
-    return scoredOptions.get(optionId);
-  };
-
-  const allOptionsScored = responseOptions.length > 0 && responseOptions.every(option => scoredOptions.has(option.id));
-
   const getOrdinalSuffix = (num: number): string => {
     if (num === 1) return "st";
     if (num === 2) return "nd";
     if (num === 3) return "rd";
     return "th";
   };
-  
+
+  const allOptionsScored =
+    responseOptions.length > 0 &&
+    responseOptions.every((option) => scoredOptions.has(option.id));
+
   return (
     <div className="flex h-screen bg-[#0f0f0f]">
-      {/* Sidebar - conditionally shown */}
+      {/* Sidebar */}
       {showSidebar && (
         <div className="w-[260px] border-r border-[#2a2a2a] bg-black flex-shrink-0">
           <div className="h-full flex flex-col">
@@ -111,7 +109,7 @@ export default function ChatInterface() {
                 New Chat
               </Button>
             </div>
-            
+
             <div className="flex-1 overflow-auto py-2 px-2">
               <div className="space-y-1">
                 {chats.map((chat) => (
@@ -122,14 +120,16 @@ export default function ChatInterface() {
                       activeChat?.id === chat.id && "bg-[#2a2a2a] shadow-sm"
                     )}
                   >
-                    <div 
+                    <div
                       className="flex-1 py-2 px-3 cursor-pointer transition-all duration-150 hover:translate-x-1"
                       onClick={() => navigateToChat(chat.id)}
                     >
                       <div className="truncate">
                         <div className="text-sm">{chat.title}</div>
                         <div className="text-xs text-zinc-400">
-                          {formatDistanceToNow(new Date(chat.updatedAt), { addSuffix: true })}
+                          {formatDistanceToNow(new Date(chat.updatedAt), {
+                            addSuffix: true,
+                          })}
                         </div>
                       </div>
                     </div>
@@ -146,7 +146,7 @@ export default function ChatInterface() {
                 ))}
               </div>
             </div>
-            
+
             <div className="p-4 border-t border-[#2a2a2a]">
               <Button
                 variant="ghost"
@@ -160,7 +160,7 @@ export default function ChatInterface() {
           </div>
         </div>
       )}
-      
+
       {/* Main Content */}
       <div className="flex flex-col flex-1 h-full bg-[#0a0a0a]">
         {/* Header */}
@@ -174,14 +174,38 @@ export default function ChatInterface() {
             <Menu className="h-5 w-5 transition-transform duration-200 hover:rotate-180" />
             <span className="sr-only">Toggle Sidebar</span>
           </Button>
+
           <h1 className="font-medium text-sm">
             {activeChat?.title ?? "New Chat"}
           </h1>
+
+          <div className="ml-4">
+            {/* Dropdown for selecting OpenRouter model */}
+            <select
+              value={openRouterModel}
+              onChange={(e) => setOpenRouterModel(e.target.value)}
+              className="bg-[#2a2a2a] text-zinc-300 border-none rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1a7f64] focus:border-[#1a7f64]"
+            >
+              <option value="openai/gpt-4.1">gpt-4.1</option>
+              <option value="anthropic/claude-3.7-sonnet">claude-3.7-sonnet</option>
+              <option value="google/gemini-2.5-pro-preview">gemini-2.5-pro-preview</option>
+              <option value="x-ai/grok-3-beta">grok-3-beta</option>
+              <option value="deepseek/deepseek-r1-0528">deepseek-r1-0528</option>
+              <option value="meta-llama/llama-4-maverick">llama-4-maverick</option>
+            </select>
+          </div>
+
+
           <div className="ml-auto flex items-center space-x-2">
             {/* Response Mode Toggle */}
             <div className="flex items-center gap-2 mr-4">
-              <span 
-                className={cn("text-xs transition-colors cursor-pointer hover:opacity-80", responseMode === "manual" ? "text-[#1a7f64]" : "text-zinc-400")}
+              <span
+                className={cn(
+                  "text-xs transition-colors cursor-pointer hover:opacity-80",
+                  responseMode === "manual"
+                    ? "text-[#1a7f64]"
+                    : "text-zinc-400"
+                )}
                 onClick={() => setResponseMode("manual")}
               >
                 Manual
@@ -189,7 +213,15 @@ export default function ChatInterface() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={toggleResponseMode}
+                onClick={() =>
+                  setResponseMode((prev) =>
+                    prev === "manual"
+                      ? "scoring"
+                      : prev === "scoring"
+                      ? "ranking"
+                      : "manual"
+                  )
+                }
                 className="h-8 w-8 transition-all duration-200 hover:scale-110"
               >
                 {responseMode === "manual" ? (
@@ -200,8 +232,13 @@ export default function ChatInterface() {
                   <div className="w-2 h-2 rounded-full bg-purple-500" />
                 )}
               </Button>
-              <span 
-                className={cn("text-xs transition-colors cursor-pointer hover:opacity-80", responseMode === "scoring" ? "text-orange-500" : "text-zinc-400")}
+              <span
+                className={cn(
+                  "text-xs transition-colors cursor-pointer hover:opacity-80",
+                  responseMode === "scoring"
+                    ? "text-orange-500"
+                    : "text-zinc-400"
+                )}
                 onClick={() => setResponseMode("scoring")}
               >
                 Scoring
@@ -209,7 +246,15 @@ export default function ChatInterface() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={toggleResponseMode}
+                onClick={() =>
+                  setResponseMode((prev) =>
+                    prev === "ranking"
+                      ? "manual"
+                      : prev === "manual"
+                      ? "scoring"
+                      : "ranking"
+                  )
+                }
                 className="h-8 w-8 transition-all duration-200 hover:scale-110"
               >
                 {responseMode === "ranking" ? (
@@ -218,8 +263,13 @@ export default function ChatInterface() {
                   <div className="w-2 h-2 rounded-full bg-zinc-600" />
                 )}
               </Button>
-              <span 
-                className={cn("text-xs transition-colors cursor-pointer hover:opacity-80", responseMode === "ranking" ? "text-purple-500" : "text-zinc-400")}
+              <span
+                className={cn(
+                  "text-xs transition-colors cursor-pointer hover:opacity-80",
+                  responseMode === "ranking"
+                    ? "text-purple-500"
+                    : "text-zinc-400"
+                )}
                 onClick={() => setResponseMode("ranking")}
               >
                 Ranking
@@ -230,7 +280,10 @@ export default function ChatInterface() {
               <div className="flex items-center mr-4 transition-all duration-200 hover:scale-105">
                 <Avatar className="h-7 w-7 mr-2 transition-all duration-200 hover:scale-110">
                   {session.user.image ? (
-                    <AvatarImage src={session.user.image} alt={session.user.name ?? 'User'} />
+                    <AvatarImage
+                      src={session.user.image}
+                      alt={session.user.name ?? "User"}
+                    />
                   ) : (
                     <AvatarFallback className="bg-[#1a7f64]">
                       <User className="h-3.5 w-3.5" />
@@ -253,7 +306,7 @@ export default function ChatInterface() {
             </Button>
           </div>
         </header>
-        
+
         {/* Chat Area */}
         <div className="flex-1 flex flex-col bg-[#0a0a0a] overflow-hidden">
           {/* Messages */}
@@ -273,18 +326,29 @@ export default function ChatInterface() {
                         AI
                       </div>
                       <div className="prose prose-invert max-w-none">
-                        <ReactMarkdown 
+                        <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            // Add custom styling for markdown elements
-                            strong: ({node: _node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
-                            h1: ({node: _node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
-                            h2: ({node: _node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
-                            h3: ({node: _node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
-                            ul: ({node: _node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
-                            ol: ({node: _node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
-                            li: ({node: _node, ...props}) => <li className="my-1" {...props} />,
-                            p: ({node: _node, ...props}) => <p className="my-2" {...props} />,
+                            strong: ({ node: _node, ...props }) => (
+                              <span className="font-bold text-[#4fd1c5]" {...props} />
+                            ),
+                            h1: ({ node: _node, ...props }) => (
+                              <h1 className="text-xl font-bold mt-4 mb-2" {...props} />
+                            ),
+                            h2: ({ node: _node, ...props }) => (
+                              <h2 className="text-lg font-bold mt-3 mb-2" {...props} />
+                            ),
+                            h3: ({ node: _node, ...props }) => (
+                              <h3 className="text-md font-bold mt-3 mb-1" {...props} />
+                            ),
+                            ul: ({ node: _node, ...props }) => (
+                              <ul className="list-disc pl-5 my-2 space-y-1" {...props} />
+                            ),
+                            ol: ({ node: _node, ...props }) => (
+                              <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />
+                            ),
+                            li: ({ node: _node, ...props }) => <li className="my-1" {...props} />,
+                            p: ({ node: _node, ...props }) => <p className="my-2" {...props} />,
                           }}
                         >
                           {message.content}
@@ -300,7 +364,7 @@ export default function ChatInterface() {
                   )}
                 </div>
               ))}
-              
+
               {/* AI Response Options */}
               {showResponseOptions && responseOptions.length > 0 && (
                 <div className="flex items-start animate-in slide-in-from-bottom-4 duration-700">
@@ -308,36 +372,49 @@ export default function ChatInterface() {
                     AI
                   </div>
                   <div className="flex flex-col space-y-3 w-full">
-                    {/* Ranking Mode - Show responses in ranked order */}
+                    {/* Ranking Mode */}
                     {responseMode === "ranking" ? (
                       rankedOptions.map((optionId, index) => {
-                        const option = responseOptions.find(o => o.id === optionId);
+                        const option = responseOptions.find((o) => o.id === optionId);
                         if (!option) return null;
                         const rank = index + 1;
-                        
+
                         return (
-                          <div 
+                          <div
                             key={option.id}
                             className="bg-[#2a2a2a] px-4 py-3 rounded-xl transition-all duration-300 flex flex-col animate-in slide-in-from-left-2 border-l-4"
-                            style={{ 
+                            style={{
                               animationDelay: `${index * 100}ms`,
-                              borderLeftColor: rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#4a4a4a'
+                              borderLeftColor:
+                                rank === 1
+                                  ? "#ffd700"
+                                  : rank === 2
+                                  ? "#c0c0c0"
+                                  : rank === 3
+                                  ? "#cd7f32"
+                                  : "#4a4a4a",
                             }}
                           >
                             <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-2">
-                                <div className={cn(
-                                  "flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold",
-                                  rank === 1 ? "bg-yellow-500 text-black" :
-                                  rank === 2 ? "bg-gray-400 text-black" :
-                                  rank === 3 ? "bg-amber-600 text-white" :
-                                  "bg-[#404040] text-zinc-300"
-                                )}>
+                                <div
+                                  className={cn(
+                                    "flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold",
+                                    rank === 1
+                                      ? "bg-yellow-500 text-black"
+                                      : rank === 2
+                                      ? "bg-gray-400 text-black"
+                                      : rank === 3
+                                      ? "bg-amber-600 text-white"
+                                      : "bg-[#404040] text-zinc-300"
+                                  )}
+                                >
                                   {rank === 1 && <Trophy className="h-4 w-4" />}
                                   {rank !== 1 && rank}
                                 </div>
                                 <span className="text-sm font-medium">
-                                  {rank}{getOrdinalSuffix(rank)} Place
+                                  {rank}
+                                  {getOrdinalSuffix(rank)} Place
                                 </span>
                               </div>
                               <div className="flex gap-1">
@@ -361,26 +438,41 @@ export default function ChatInterface() {
                                 </Button>
                               </div>
                             </div>
-                            
+
                             <div className="prose prose-invert max-w-none">
-                              {option.content.startsWith('API Raw Data:') ? (
+                              {option.content.startsWith("API Raw Data:") ? (
                                 <pre className="text-xs overflow-auto max-h-[400px] p-2 bg-[#1e1e1e] rounded">
-                                  {option.content.replace('API Raw Data: ', '')}
+                                  {option.content.replace("API Raw Data: ", "")}
                                 </pre>
-                              ) : option.content.startsWith('Collection ') && option.content.includes(': Error') ? (
+                              ) : option.content.startsWith("Collection ") &&
+                                option.content.includes(": Error") ? (
                                 <p>{option.content}</p>
                               ) : (
-                                <ReactMarkdown 
+                                <ReactMarkdown
                                   remarkPlugins={[remarkGfm]}
                                   components={{
-                                    strong: ({node: _node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
-                                    h1: ({node: _node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
-                                    h2: ({node: _node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
-                                    h3: ({node: _node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
-                                    ul: ({node: _node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
-                                    ol: ({node: _node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
-                                    li: ({node: _node, ...props}) => <li className="my-1" {...props} />,
-                                    p: ({node: _node, ...props}) => <p className="my-2" {...props} />,
+                                    strong: ({ node: _node, ...props }) => (
+                                      <span className="font-bold text-[#4fd1c5]" {...props} />
+                                    ),
+                                    h1: ({ node: _node, ...props }) => (
+                                      <h1 className="text-xl font-bold mt-4 mb-2" {...props} />
+                                    ),
+                                    h2: ({ node: _node, ...props }) => (
+                                      <h2 className="text-lg font-bold mt-3 mb-2" {...props} />
+                                    ),
+                                    h3: ({ node: _node, ...props }) => (
+                                      <h3 className="text-md font-bold mt-3 mb-1" {...props} />
+                                    ),
+                                    ul: ({ node: _node, ...props }) => (
+                                      <ul className="list-disc pl-5 my-2 space-y-1" {...props} />
+                                    ),
+                                    ol: ({ node: _node, ...props }) => (
+                                      <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />
+                                    ),
+                                    li: ({ node: _node, ...props }) => (
+                                      <li className="my-1" {...props} />
+                                    ),
+                                    p: ({ node: _node, ...props }) => <p className="my-2" {...props} />,
                                   }}
                                 >
                                   {option.content}
@@ -391,37 +483,57 @@ export default function ChatInterface() {
                         );
                       })
                     ) : (
-                      /* Manual and Scoring Modes - Show responses in original order */
+                      // Manual and Scoring Modes
                       responseOptions.map((option, index) => (
-                        <div 
+                        <div
                           key={option.id}
                           className={cn(
                             "bg-[#2a2a2a] px-4 py-3 rounded-xl transition-all duration-300 flex flex-col animate-in slide-in-from-left-2",
-                            responseMode === "manual" && "hover:bg-[#3a3a3a] cursor-pointer hover:scale-[1.01] hover:shadow-lg hover:shadow-[#1a7f64]/10 active:scale-[0.99]"
+                            responseMode === "manual" &&
+                              "hover:bg-[#3a3a3a] cursor-pointer hover:scale-[1.01] hover:shadow-lg hover:shadow-[#1a7f64]/10 active:scale-[0.99]"
                           )}
                           style={{ animationDelay: `${index * 100}ms` }}
-                          onClick={responseMode === "manual" ? () => selectResponseOption(option.id) : undefined}
+                          onClick={
+                            responseMode === "manual"
+                              ? () => selectResponseOption(option.id)
+                              : undefined
+                          }
                         >
                           <div className="flex items-start">
                             <div className="prose prose-invert max-w-none flex-1">
-                              {option.content.startsWith('API Raw Data:') ? (
+                              {option.content.startsWith("API Raw Data:") ? (
                                 <pre className="text-xs overflow-auto max-h-[400px] p-2 bg-[#1e1e1e] rounded">
-                                  {option.content.replace('API Raw Data: ', '')}
+                                  {option.content.replace("API Raw Data: ", "")}
                                 </pre>
-                              ) : option.content.startsWith('Collection ') && option.content.includes(': Error') ? (
+                              ) : option.content.startsWith("Collection ") &&
+                                option.content.includes(": Error") ? (
                                 <p>{option.content}</p>
                               ) : (
-                                <ReactMarkdown 
+                                <ReactMarkdown
                                   remarkPlugins={[remarkGfm]}
                                   components={{
-                                    strong: ({node: _node, ...props}) => <span className="font-bold text-[#4fd1c5]" {...props} />,
-                                    h1: ({node: _node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
-                                    h2: ({node: _node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-2" {...props} />,
-                                    h3: ({node: _node, ...props}) => <h3 className="text-md font-bold mt-3 mb-1" {...props} />,
-                                    ul: ({node: _node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
-                                    ol: ({node: _node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
-                                    li: ({node: _node, ...props}) => <li className="my-1" {...props} />,
-                                    p: ({node: _node, ...props}) => <p className="my-2" {...props} />,
+                                    strong: ({ node: _node, ...props }) => (
+                                      <span className="font-bold text-[#4fd1c5]" {...props} />
+                                    ),
+                                    h1: ({ node: _node, ...props }) => (
+                                      <h1 className="text-xl font-bold mt-4 mb-2" {...props} />
+                                    ),
+                                    h2: ({ node: _node, ...props }) => (
+                                      <h2 className="text-lg font-bold mt-3 mb-2" {...props} />
+                                    ),
+                                    h3: ({ node: _node, ...props }) => (
+                                      <h3 className="text-md font-bold mt-3 mb-1" {...props} />
+                                    ),
+                                    ul: ({ node: _node, ...props }) => (
+                                      <ul className="list-disc pl-5 my-2 space-y-1" {...props} />
+                                    ),
+                                    ol: ({ node: _node, ...props }) => (
+                                      <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />
+                                    ),
+                                    li: ({ node: _node, ...props }) => (
+                                      <li className="my-1" {...props} />
+                                    ),
+                                    p: ({ node: _node, ...props }) => <p className="my-2" {...props} />,
                                   }}
                                 >
                                   {option.content}
@@ -434,21 +546,24 @@ export default function ChatInterface() {
                               </div>
                             )}
                           </div>
-                          
+
                           {/* Scoring Interface */}
                           {responseMode === "scoring" && (
                             <div className="mt-3 pt-3 border-t border-[#3a3a3a]">
                               <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-zinc-400">Rate this response (1-10):</span>
-                                {getScoreForOption(option.id) && (
+                                <span className="text-xs text-zinc-400">
+                                  Rate this response (1-10):
+                                </span>
+                                {scoredOptions.get(option.id) && (
                                   <span className="text-xs font-medium text-[#1a7f64]">
-                                    Scored: {getScoreForOption(option.id)}/10
+                                    Scored: {scoredOptions.get(option.id)}/10
                                   </span>
                                 )}
                               </div>
                               <div className="flex gap-1 flex-wrap">
                                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => {
-                                  const isSelected = getScoreForOption(option.id) === score;
+                                  const isSelected =
+                                    scoredOptions.get(option.id) === score;
                                   return (
                                     <Button
                                       key={score}
@@ -456,13 +571,13 @@ export default function ChatInterface() {
                                       size="sm"
                                       className={cn(
                                         "h-8 w-8 p-0 text-xs transition-all duration-200 hover:scale-110 active:scale-95",
-                                        isSelected 
-                                          ? "bg-[#1a7f64] text-white hover:bg-[#18735a]" 
+                                        isSelected
+                                          ? "bg-[#1a7f64] text-white hover:bg-[#18735a]"
                                           : "bg-[#1a1a1a] hover:bg-[#2a2a2a] text-zinc-300"
                                       )}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleScoreClick(option.id, score);
+                                        scoreResponseOption(option.id, score);
                                       }}
                                     >
                                       {score}
@@ -475,7 +590,7 @@ export default function ChatInterface() {
                         </div>
                       ))
                     )}
-                    
+
                     {/* Action buttons and instructions */}
                     <div className="flex flex-col gap-2">
                       {responseMode === "ranking" && rankedOptions.length > 0 && (
@@ -486,22 +601,21 @@ export default function ChatInterface() {
                           Select Top Ranked Response
                         </Button>
                       )}
-                      
+
                       <div className="text-xs text-zinc-500 italic pl-1 animate-in fade-in duration-1000">
-                        {responseMode === "manual" 
-                          ? "Choose one of the responses above" 
+                        {responseMode === "manual"
+                          ? "Choose one of the responses above"
                           : responseMode === "scoring"
-                          ? allOptionsScored 
+                          ? allOptionsScored
                             ? "All responses scored! The highest scored response will be automatically selected."
                             : "Score each response from 1-10. The highest scored response will be automatically selected."
-                          : "Use the arrows to rank responses from best (1st) to worst. The top-ranked response will be selected."
-                        }
+                          : "Use the arrows to rank responses from best (1st) to worst. The top-ranked response will be selected."}
                       </div>
                     </div>
                   </div>
                 </div>
               )}
-              
+
               {isLoading && (
                 <div className="flex items-start animate-in slide-in-from-bottom-2 duration-500">
                   <div className="shrink-0 w-9 h-9 bg-[#1a7f64] rounded-full flex items-center justify-center mr-4 text-sm font-medium animate-pulse">
@@ -523,33 +637,43 @@ export default function ChatInterface() {
                   </div>
                 </div>
               )}
-              
-              {/* If no messages */}
-              {(!activeChat || activeChat?.messages?.length === 0) && !isLoading && !showResponseOptions && (
-                <div className="flex flex-col items-center justify-center py-12 animate-in fade-in duration-1000">
-                  {!activeChat ? (
-                    <>
-                      <h2 className="text-xl font-medium">Welcome to your Chat</h2>
-                      <p className="text-zinc-400 mt-2">Create a new chat to get started</p>
-                    </>
-                  ) : (
-                    <>
-                      <h2 className="text-xl font-medium">Start a new conversation</h2>
-                      <p className="text-zinc-400 mt-2">Send a message to get started</p>
-                    </>
-                  )}
-                </div>
-              )}
-              
+
+              {(!activeChat || activeChat?.messages?.length === 0) &&
+                !isLoading &&
+                !showResponseOptions && (
+                  <div className="flex flex-col items-center justify-center py-12 animate-in fade-in duration-1000">
+                    {!activeChat ? (
+                      <>
+                        <h2 className="text-xl font-medium">Welcome to your Chat</h2>
+                        <p className="text-zinc-400 mt-2">
+                          Create a new chat to get started
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <h2 className="text-xl font-medium">
+                          Start a new conversation
+                        </h2>
+                        <p className="text-zinc-400 mt-2">
+                          Send a message to get started
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+
               {/* Auto-scroll anchor */}
               <div ref={messagesEndRef} />
             </div>
           </div>
-          
+
           {/* Input Form */}
           <div className="border-t border-[#2a2a2a] p-4 pb-6 bg-gradient-to-b from-[#0a0a0a] to-[#111111]">
             <div className="max-w-3xl mx-auto">
-              <form onSubmit={handleSubmit} className="flex items-end space-x-2 relative">
+              <form
+                onSubmit={handleSubmit}
+                className="flex items-end space-x-2 relative"
+              >
                 <div className="flex-1 relative shadow-lg">
                   <Input
                     type="text"
@@ -577,4 +701,4 @@ export default function ChatInterface() {
       </div>
     </div>
   );
-} 
+}
