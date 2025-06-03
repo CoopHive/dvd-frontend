@@ -12,6 +12,7 @@ import {
   addMessageToChat,
   deleteChat,
 } from "~/lib/chat-storage";
+import { API_CONFIG, OPENROUTER_CONFIG } from "~/config/api";
 
 export type ResponseOption = {
   id: string;
@@ -20,20 +21,6 @@ export type ResponseOption = {
 };
 
 export type ResponseMode = "manual" | "scoring" | "ranking";
-
-// API configuration
-const API_CONFIG = {
-  url: "https://57a8-38-70-220-253.ngrok-free.app/api/evaluate",
-  collections: ["openai_paragraph_openai", "openai_fixed_length_openai"],
-  model: "openai/gpt-3.5-turbo-0613",
-};
-
-// OpenRouter API configuration (we keep `defaultModel` here, but actual `openRouterModel` is managed in state)
-const OPENROUTER_CONFIG = {
-  url: "https://openrouter.ai/api/v1/chat/completions",
-  defaultModel: "openai/gpt-3.5-turbo",
-  apiKey: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ?? "",
-};
 
 // For debugging
 const logApiRequest = (url: string, payload: Record<string, unknown>) => {
@@ -240,10 +227,10 @@ export const useChat = () => {
         model_name: API_CONFIG.model,
       };
 
-      logApiRequest(API_CONFIG.url, payload);
+      logApiRequest(API_CONFIG.url + "/api/evaluate", payload);
 
       try {
-        const response = await fetch(API_CONFIG.url, {
+        const response = await fetch(API_CONFIG.url + "/api/evaluate", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
