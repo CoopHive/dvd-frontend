@@ -217,11 +217,119 @@ export const useChat = () => {
     return "No response received from OpenRouter.";
   };
   
+  // Create enhanced query using chat context
+  const createEnhancedQuery = async (
+    userQuery: string,
+    chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>
+  ): Promise<string> => {
+    if (!OPENROUTER_CONFIG.apiKey) {
+      console.warn("No OpenRouter API key available, using original query");
+      return userQuery;
+    }
+
+    // If there are no previous messages, just return the original query
+    if (chatMessages.length === 0) {
+      return userQuery;
+    }
+
+    // Build conversation context from recent messages (last 10 messages max to avoid token limits)
+    const recentMessages = chatMessages.slice(-10);
+    let conversationContext = "";
+    
+    recentMessages.forEach((msg, index) => {
+      const role = msg.role === 'user' ? 'User' : 'Assistant';
+      conversationContext += `${role}: ${msg.content}\n\n`;
+    });
+
+    // Prepare the message for OpenRouter to create an enhanced query
+    const queryEnhancementPayload = {
+      model: openRouterModel,
+      messages: [
+        {
+          role: "system",
+          content: `You are a query enhancement assistant. Your task is to create a comprehensive, self-contained search query that incorporates relevant context from the conversation history.
+
+          Given the conversation history and the user's new question, create an enhanced search query that:
+          1. Includes relevant context from previous questions and answers when needed
+          2. Is self-contained and can be understood without the conversation history
+          3. Maintains the user's original intent but adds necessary context for better database search results
+          4. Is concise but comprehensive
+          5. Focuses on the information needed to answer the current question
+
+          IMPORTANT: Only return the improved query text, nothing else. Do not include explanations, quotation marks, or any other formatting.
+
+          Conversation History:
+          ${conversationContext}
+
+          New User Question: ${userQuery}
+
+          Create an enhanced search query:`,
+                  },
+        {
+          role: "user",
+          content: userQuery,
+        },
+      ],
+      temperature: 0.3,
+      max_tokens: 200,
+    };
+
+    try {
+      console.log("Creating enhanced query with context...");
+      
+      const response = await fetch(OPENROUTER_CONFIG.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENROUTER_CONFIG.apiKey}`,
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "Chat UI Demo - Query Enhancement",
+        },
+        body: JSON.stringify(queryEnhancementPayload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Query enhancement failed (${response.status}): ${errorText}`);
+        return userQuery; // Fall back to original query
+      }
+
+      const result = (await response.json()) as OpenRouterResponse;
+      
+      if (result.choices?.[0]?.message?.content) {
+        const enhancedQuery = result.choices[0].message.content.trim();
+        console.log("Original query:", userQuery);
+        console.log("Enhanced query:", enhancedQuery);
+        return enhancedQuery;
+      }
+
+      return userQuery;
+    } catch (error) {
+      console.error("Error creating enhanced query:", error);
+      return userQuery; // Fall back to original query
+    }
+  };
+
   // Fetch response options from API
   const fetchResponseOptions = useCallback(
     async (query: string): Promise<ResponseOption[]> => {
+      // Get chat context for query enhancement
+      let enhancedQuery = query;
+      
+      if (activeChat && activeChat.messages.length > 0) {
+        // Extract previous messages (excluding the welcome message if it exists)
+        const chatMessages = activeChat.messages
+          .filter(msg => msg.content !== "How can I help you today?")
+          .map(msg => ({
+            role: msg.role,
+            content: msg.content
+          }));
+        
+        enhancedQuery = await createEnhancedQuery(query, chatMessages);
+      }
+
       const payload = {
-        query: query,
+        query: enhancedQuery, // Use enhanced query for database search
         collections: API_CONFIG.collections,
         db_path: null,
         model_name: API_CONFIG.model,
@@ -296,11 +404,12 @@ export const useChat = () => {
                 })
                 .filter((content): content is string => content !== null); // Type guard
 
-              // Process this collection with OpenRouter
+              // Process this collection with OpenRouter using the ORIGINAL user query
+              // (not the enhanced one, as the enhanced query was for database search)
               if (contents.length > 0) {
                 try {
                   const openRouterResponse = await processWithOpenRouter(
-                    query,
+                    query, // Use original query for final response generation
                     contents,
                     collectionName
                   );
@@ -366,7 +475,7 @@ export const useChat = () => {
         ];
       }
     },
-    [processWithOpenRouter]
+    [processWithOpenRouter, activeChat, openRouterModel]
   );
 
   // Rank response options
