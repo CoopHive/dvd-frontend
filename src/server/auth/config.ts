@@ -22,6 +22,36 @@ declare module "next-auth" {
   // }
 }
 
+// Email whitelist configuration
+const ALLOWED_EMAIL_DOMAINS = [
+  "yourdomain.com",
+  "company.com",
+];
+
+const ALLOWED_EMAILS = [
+  "vardhanshorewala@gmail.com",
+];
+
+/**
+ * Check if an email is allowed based on domain or specific email whitelist
+ */
+function isEmailAllowed(email: string): boolean {
+  if (!email) return false;
+  
+  // Check if the specific email is in the allowed list
+  if (ALLOWED_EMAILS.includes(email.toLowerCase())) {
+    return true;
+  }
+  
+  // Check if the email domain is in the allowed domains list
+  const domain = email.split("@")[1];
+  if (domain && ALLOWED_EMAIL_DOMAINS.includes(domain.toLowerCase())) {
+    return true;
+  }
+  
+  return false;
+}
+
 /**
  * Options for NextAuth.js used to configure adapters, providers, callbacks, etc.
  *
@@ -45,8 +75,22 @@ export const authConfig = {
   ],
   pages: {
     signIn: "/auth/signin",
+    error: "/auth/access-denied",
   },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      // Only apply email restrictions for Google OAuth
+      if (account?.provider === "google") {
+        const email = user.email || profile?.email;
+        
+        if (!email || !isEmailAllowed(email)) {
+          // Redirect to access denied page
+          return "/auth/access-denied";
+        }
+      }
+      
+      return true;
+    },
     session: ({ session, token }) => ({
       ...session,
       user: {
