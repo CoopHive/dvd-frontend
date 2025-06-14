@@ -30,6 +30,7 @@ const ALLOWED_EMAIL_DOMAINS = [
 
 const ALLOWED_EMAILS = [
   "vardhanshorewala@gmail.com",
+  "vardhanshorewala@berkeley.edu",
 ];
 
 /**

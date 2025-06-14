@@ -39,6 +39,9 @@ interface CollectionResult {
 }
 
 interface ApiResponse {
+  total_collections?: number;
+  collection_names?: string[];
+  user_email?: string;
   collection_results?: Record<string, CollectionResult>;
 }
 
@@ -68,6 +71,13 @@ export const useChat = () => {
   const [responseMode, setResponseMode] = useState<ResponseMode>("manual");
   const [scoredOptions, setScoredOptions] = useState<Map<string, number>>(new Map());
   const [rankedOptions, setRankedOptions] = useState<string[]>([]);
+  
+  // New state for collection information
+  const [collectionInfo, setCollectionInfo] = useState<{
+    totalCollections: number;
+    collectionNames: string[];
+    userEmail: string;
+  } | null>(null);
 
   // New piece of state: which OpenRouter model to use
   const [openRouterModel, setOpenRouterModel] = useState<string>(
@@ -310,15 +320,96 @@ export const useChat = () => {
     }
   };
 
+  // Generate contextual GPT response without RAG
+  const generateContextualGPTResponse = async (
+    userQuery: string,
+    chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>
+  ): Promise<string> => {
+    if (!OPENROUTER_CONFIG.apiKey) {
+      return "OpenRouter API key is required for GPT responses.";
+    }
+
+    // Build conversation context from recent messages (last 15 messages max)
+    const recentMessages = chatMessages.slice(-15);
+    
+    // Create messages array for the conversation
+    const messages = [];
+    
+    // Add system message
+    messages.push({
+      role: "system",
+      content: `You are a helpful AI assistant. Please respond to the user's question based on the conversation history provided. Use your general knowledge and reasoning abilities to provide a comprehensive and helpful response. Format your response with markdown: use **bold** for important points, bullet lists (•) for multiple items, and organize information in a readable format.
+
+      If the conversation contains previous responses from database searches or other sources, you may reference and build upon that information, but do not claim to have access to specific databases or documents unless they were mentioned in the conversation history.
+
+      Provide a thoughtful, well-structured response that addresses the user's question directly.`,
+      });
+
+    // Add conversation history
+    recentMessages.forEach((msg) => {
+      messages.push({
+        role: msg.role,
+        content: msg.content,
+      });
+    });
+
+    // Add the current user query
+    messages.push({
+      role: "user",
+      content: userQuery,
+    });
+
+    const gptPayload = {
+      model: openRouterModel,
+      messages: messages,
+      temperature: 0.7,
+      max_tokens: 1500,
+    };
+
+    try {
+      console.log("Generating contextual GPT response...");
+      
+      const response = await fetch(OPENROUTER_CONFIG.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENROUTER_CONFIG.apiKey}`,
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "Chat UI Demo - Contextual Response",
+        },
+        body: JSON.stringify(gptPayload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`GPT API error (${response.status}): ${errorText}`);
+      }
+
+      const result = (await response.json()) as OpenRouterResponse;
+      
+      if (result.choices?.[0]?.message?.content) {
+        return result.choices[0].message.content;
+      }
+
+      return "No response received from GPT.";
+    } catch (error) {
+      console.error("Error generating contextual GPT response:", error);
+      return `Error generating GPT response: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`;
+    }
+  };
+
   // Fetch response options from API
   const fetchResponseOptions = useCallback(
     async (query: string): Promise<ResponseOption[]> => {
       // Get chat context for query enhancement
       let enhancedQuery = query;
+      let chatMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       
       if (activeChat && activeChat.messages.length > 0) {
         // Extract previous messages (excluding the welcome message if it exists)
-        const chatMessages = activeChat.messages
+        chatMessages = activeChat.messages
           .filter(msg => msg.content !== "How can I help you today?")
           .map(msg => ({
             role: msg.role,
@@ -330,15 +421,17 @@ export const useChat = () => {
 
       const payload = {
         query: enhancedQuery, // Use enhanced query for database search
-        collections: API_CONFIG.collections,
         db_path: null,
         model_name: API_CONFIG.model,
+        user_email: session?.user?.email, // Include user email for additional context
       };
 
-      logApiRequest(API_CONFIG.url + "/api/evaluate", payload);
+      // Use light server for evaluation operations
+      const evaluateUrl = `${API_CONFIG.light.url}${API_CONFIG.light.endpoints.evaluate}`;
+      logApiRequest(evaluateUrl, payload);
 
       try {
-        const response = await fetch(API_CONFIG.url + "/api/evaluate", {
+        const response = await fetch(evaluateUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -350,14 +443,22 @@ export const useChat = () => {
 
         if (!response.ok) {
           console.error(`API request failed with status ${response.status}`);
+          
+          // Generate contextual GPT response even if RAG fails
+          const gptResponse = await generateContextualGPTResponse(query, chatMessages);
+          
           return [
             {
               id: uuidv4(),
-              content: `Error: API request failed with status ${response.status}. Please check the server connection.`,
+              content: `**GPT Response (No Database Access):** ${gptResponse}`,
             },
             {
               id: uuidv4(),
-              content: "The API server might not be running or the endpoint might be incorrect.",
+              content: `Error: API request failed with status ${response.status}. Please check the light server connection (port 5001).`,
+            },
+            {
+              id: uuidv4(),
+              content: "The light server might not be running or the endpoint might be incorrect.",
             },
             {
               id: uuidv4(),
@@ -370,8 +471,51 @@ export const useChat = () => {
         const data = (await response.json()) as ApiResponse;
         console.log("API response data:", data);
 
+        // Check if there are no collections available
+        if (data.total_collections === 0) {
+          console.log("No collections found for user");
+          
+          // Update collection information even when empty
+          setCollectionInfo({
+            totalCollections: 0,
+            collectionNames: [],
+            userEmail: data.user_email || "",
+          });
+
+          // Generate contextual GPT response when no collections available
+          const gptResponse = await generateContextualGPTResponse(query, chatMessages);
+
+          return [
+            {
+              id: uuidv4(),
+              content: `**GPT Response (No Database Access):** ${gptResponse}`,
+            },
+            {
+              id: uuidv4(),
+              content: "No information found. Please add papers first by uploading documents to create databases before querying.",
+            },
+          ];
+        }
+
         // Extract content fields from each collection
         const responseOptions: ResponseOption[] = [];
+
+        // First, add contextual GPT response
+        try {
+          const gptResponse = await generateContextualGPTResponse(query, chatMessages);
+          responseOptions.push({
+            id: uuidv4(),
+            content: `**GPT Response (Conversational Context):** ${gptResponse}`,
+          });
+        } catch (error) {
+          console.error("Error generating contextual GPT response:", error);
+          responseOptions.push({
+            id: uuidv4(),
+            content: `**GPT Response:** Failed to generate contextual response. ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+          });
+        }
 
         if (data.collection_results) {
           // Iterate through each collection
@@ -444,20 +588,40 @@ export const useChat = () => {
           }
         }
 
-        // If no valid responses were generated, add a fallback
-        if (responseOptions.length === 0) {
+        // If no valid responses were generated (other than GPT), add a fallback
+        if (responseOptions.length === 1) { // Only GPT response exists
           responseOptions.push({
             id: uuidv4(),
             content: "No valid responses could be generated from the available collections.",
           });
         }
 
+        // Update collection information
+        setCollectionInfo({
+          totalCollections: data.total_collections || 0,
+          collectionNames: data.collection_names || [],
+          userEmail: data.user_email || "",
+        });
+
         return responseOptions;
       } catch (error) {
         console.error("Error fetching response options:", error);
 
+        // Generate contextual GPT response even when API fails
+        let gptResponse: string;
+        try {
+          gptResponse = await generateContextualGPTResponse(query, chatMessages);
+        } catch (gptError) {
+          console.error("Error generating GPT fallback response:", gptError);
+          gptResponse = "Unable to generate response due to API connectivity issues.";
+        }
+
         // Return fallback options in case of error
         return [
+          {
+            id: uuidv4(),
+            content: `**GPT Response (No Database Access):** ${gptResponse}`,
+          },
           {
             id: uuidv4(),
             content: `Error connecting to API: ${
@@ -475,7 +639,7 @@ export const useChat = () => {
         ];
       }
     },
-    [processWithOpenRouter, activeChat, openRouterModel]
+    [processWithOpenRouter, activeChat, openRouterModel, userId, session, generateContextualGPTResponse, createEnhancedQuery]
   );
 
   // Rank response options
@@ -537,6 +701,7 @@ export const useChat = () => {
       setShowResponseOptions(false);
       setResponseOptions([]);
       setRankedOptions([]);
+      setCollectionInfo(null); // Clear collection info
     }
   }, [rankedOptions, responseOptions, chatId, userId]);
 
@@ -609,6 +774,7 @@ export const useChat = () => {
           setShowResponseOptions(false);
           setResponseOptions([]);
           setScoredOptions(new Map());
+          setCollectionInfo(null); // Clear collection info
         }
       }
     },
@@ -641,6 +807,7 @@ export const useChat = () => {
 
       setShowResponseOptions(false);
       setResponseOptions([]);
+      setCollectionInfo(null); // Clear collection info
     },
     [chatId, userId, showResponseOptions, responseOptions, responseMode]
   );
@@ -653,6 +820,7 @@ export const useChat = () => {
 
       setScoredOptions(new Map());
       setRankedOptions([]);
+      setCollectionInfo(null); // Reset collection info
 
       let currentChatId = chatId;
 
@@ -750,5 +918,8 @@ export const useChat = () => {
     // Expose the dropdown state and setter
     openRouterModel,
     setOpenRouterModel,
+
+    // Expose collection information
+    collectionInfo,
   };
 };

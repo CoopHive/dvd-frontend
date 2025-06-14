@@ -6,7 +6,7 @@ import { ThemeProvider } from "~/components/theme-provider";
 import { SessionProvider } from "~/components/session-provider";
 
 export const metadata: Metadata = {
-  title: "Apiary DVD",
+  title: "Apiary",
   description: "A ChatGPT-style interface built with Next.js and Tailwind",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };

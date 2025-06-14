@@ -88,8 +88,9 @@ export default function ChatInterface() {
     setIsSubmittingUpload(true);
     
     try {
-      // Use API_CONFIG for upload endpoint
-      const response = await fetch(`${API_CONFIG.url}/api/ingest/gdrive`, {
+      // Use heavy server for upload/ingest operations
+      const uploadUrl = `${API_CONFIG.heavy.url}${API_CONFIG.heavy.endpoints.ingest}`;
+      const response = await fetch(uploadUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -101,10 +102,33 @@ export default function ChatInterface() {
           converters: selectedConverters,
           chunkers: selectedChunkers,
           embedders: selectedEmbedders,
+          user_email: session?.user?.email,
         }),
       });
 
       if (response.ok) {
+        // Call the embed endpoint on heavy server to create user database
+        try {
+          const embedUrl = `${API_CONFIG.heavy.url}${API_CONFIG.heavy.endpoints.embed}`;
+          const embedResponse = await fetch(embedUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            mode: "cors",
+            body: JSON.stringify({
+              user_email: session?.user?.email,
+            }),
+          });
+
+          if (!embedResponse.ok) {
+            console.error("Error calling embed endpoint:", embedResponse.statusText);
+          }
+        } catch (embedError) {
+          console.error("Error calling embed endpoint:", embedError);
+        }
+
         // Show success notification
         setShowSuccessNotification(true);
         setShowUploadModal(false);
