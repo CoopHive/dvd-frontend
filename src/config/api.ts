@@ -2,7 +2,7 @@
 export const API_CONFIG = {
   // Light server - quick operations (evaluation, status)
   light: {
-    url: "http://localhost:5001",
+    url: "https://d538-38-70-220-253.ngrok-free.app",
     endpoints: {
       evaluate: "/api/evaluate",
       status: "/api/status", 
@@ -11,7 +11,7 @@ export const API_CONFIG = {
   },
   // Heavy server - resource-intensive operations (ingestion, processing)
   heavy: {
-    url: "http://localhost:5002", 
+    url: "https://0b39-38-70-220-253.ngrok-free.app", 
     endpoints: {
       ingest: "/api/ingest/gdrive",
       embed: "/api/embed",
