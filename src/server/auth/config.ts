@@ -1,5 +1,6 @@
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import { API_CONFIG } from "../../config/api";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -22,35 +23,31 @@ declare module "next-auth" {
   // }
 }
 
-// Email whitelist configuration
-const ALLOWED_EMAIL_DOMAINS = [
-  "yourdomain.com",
-  "company.com",
-];
-
-const ALLOWED_EMAILS = [
-  "vardhanshorewala@gmail.com",
-  "vardhanshorewala@berkeley.edu",
-];
-
 /**
- * Check if an email is allowed based on domain or specific email whitelist
+ * Check if an email is allowed by making an API call to validate it
  */
-function isEmailAllowed(email: string): boolean {
+async function isEmailAllowed(email: string): Promise<boolean> {
   if (!email) return false;
   
-  // Check if the specific email is in the allowed list
-  if (ALLOWED_EMAILS.includes(email.toLowerCase())) {
-    return true;
+  try {
+    const response = await fetch(`${API_CONFIG.light.url}${API_CONFIG.light.endpoints.validateEmail}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: email.toLowerCase() }),
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const data = await response.json();
+    return data.isValid;
+  } catch (error) {
+    console.error('Error validating email:', error);
+    return false;
   }
-  
-  // Check if the email domain is in the allowed domains list
-  const domain = email.split("@")[1];
-  if (domain && ALLOWED_EMAIL_DOMAINS.includes(domain.toLowerCase())) {
-    return true;
-  }
-  
-  return false;
 }
 
 /**
@@ -82,9 +79,9 @@ export const authConfig = {
     async signIn({ user, account, profile }) {
       // Only apply email restrictions for Google OAuth
       if (account?.provider === "google") {
-        const email = user.email || profile?.email;
+        const email = user.email ?? profile?.email;
         
-        if (!email || !isEmailAllowed(email)) {
+        if (!email || !(await isEmailAllowed(email))) {
           // Redirect to access denied page
           return "/auth/access-denied";
         }

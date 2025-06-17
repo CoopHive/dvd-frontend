@@ -165,7 +165,7 @@ export const useChat = () => {
 
 
   // Process collection content with OpenRouter
-  const processWithOpenRouter = async (
+  const processWithOpenRouter = useCallback(async (
     userQuery: string,
     contents: string[],
     collectionName: string
@@ -225,10 +225,10 @@ export const useChat = () => {
     }
 
     return "No response received from OpenRouter.";
-  };
-  
+  }, [openRouterModel]);
+
   // Create enhanced query using chat context
-  const createEnhancedQuery = async (
+  const createEnhancedQuery = useCallback(async (
     userQuery: string,
     chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>
   ): Promise<string> => {
@@ -246,7 +246,7 @@ export const useChat = () => {
     const recentMessages = chatMessages.slice(-10);
     let conversationContext = "";
     
-    recentMessages.forEach((msg, index) => {
+    recentMessages.forEach((msg) => {
       const role = msg.role === 'user' ? 'User' : 'Assistant';
       conversationContext += `${role}: ${msg.content}\n\n`;
     });
@@ -318,10 +318,10 @@ export const useChat = () => {
       console.error("Error creating enhanced query:", error);
       return userQuery; // Fall back to original query
     }
-  };
+  }, [openRouterModel]);
 
   // Generate contextual GPT response without RAG
-  const generateContextualGPTResponse = async (
+  const generateContextualGPTResponse = useCallback(async (
     userQuery: string,
     chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>
   ): Promise<string> => {
@@ -340,10 +340,10 @@ export const useChat = () => {
       role: "system",
       content: `You are a helpful AI assistant. Please respond to the user's question based on the conversation history provided. Use your general knowledge and reasoning abilities to provide a comprehensive and helpful response. Format your response with markdown: use **bold** for important points, bullet lists (•) for multiple items, and organize information in a readable format.
 
-      If the conversation contains previous responses from database searches or other sources, you may reference and build upon that information, but do not claim to have access to specific databases or documents unless they were mentioned in the conversation history.
+If the conversation contains previous responses from database searches or other sources, you may reference and build upon that information, but do not claim to have access to specific databases or documents unless they were mentioned in the conversation history.
 
-      Provide a thoughtful, well-structured response that addresses the user's question directly.`,
-      });
+Provide a thoughtful, well-structured response that addresses the user's question directly.`,
+    });
 
     // Add conversation history
     recentMessages.forEach((msg) => {
@@ -398,7 +398,7 @@ export const useChat = () => {
         error instanceof Error ? error.message : "Unknown error"
       }`;
     }
-  };
+  }, [openRouterModel]);
 
   // Fetch response options from API
   const fetchResponseOptions = useCallback(
@@ -479,7 +479,7 @@ export const useChat = () => {
           setCollectionInfo({
             totalCollections: 0,
             collectionNames: [],
-            userEmail: data.user_email || "",
+            userEmail: data.user_email ?? "",
           });
 
           // Generate contextual GPT response when no collections available
@@ -598,9 +598,9 @@ export const useChat = () => {
 
         // Update collection information
         setCollectionInfo({
-          totalCollections: data.total_collections || 0,
-          collectionNames: data.collection_names || [],
-          userEmail: data.user_email || "",
+          totalCollections: data.total_collections ?? 0,
+          collectionNames: data.collection_names ?? [],
+          userEmail: data.user_email ?? "",
         });
 
         return responseOptions;
@@ -639,7 +639,7 @@ export const useChat = () => {
         ];
       }
     },
-    [processWithOpenRouter, activeChat, openRouterModel, userId, session, generateContextualGPTResponse, createEnhancedQuery]
+    [processWithOpenRouter, activeChat, session, generateContextualGPTResponse, createEnhancedQuery]
   );
 
   // Rank response options

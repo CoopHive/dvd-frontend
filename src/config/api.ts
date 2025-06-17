@@ -6,7 +6,8 @@ export const API_CONFIG = {
     endpoints: {
       evaluate: "/api/evaluate",
       status: "/api/status", 
-      health: "/health"
+      health: "/health",
+      validateEmail: "/api/auth/validate-email"
     }
   },
   // Heavy server - resource-intensive operations (ingestion, processing)

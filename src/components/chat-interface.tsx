@@ -71,7 +71,7 @@ export default function ChatInterface() {
   // Available options
   const availableConverters = ["marker", "openai", "markitdown"];
   const availableChunkers = ["paragraph", "sentence", "word", "fixed_length"];
-  const availableEmbedders = ["openai", "nvidia", "bge"];
+  const availableEmbedders = ["openai", "bge"];
 
   // Auto-scroll logic
   const scrollToBottom = () => {
