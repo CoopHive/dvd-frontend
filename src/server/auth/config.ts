@@ -23,6 +23,10 @@ declare module "next-auth" {
   // }
 }
 
+interface EmailValidationResponse {
+  isValid: boolean;
+}
+
 /**
  * Check if an email is allowed by making an API call to validate it
  */
@@ -42,7 +46,7 @@ async function isEmailAllowed(email: string): Promise<boolean> {
       return false;
     }
 
-    const data = await response.json();
+    const data = await response.json() as EmailValidationResponse;
     return data.isValid;
   } catch (error) {
     console.error('Error validating email:', error);

@@ -107,29 +107,16 @@ export default function ChatInterface() {
       });
 
       if (response.ok) {
-        // Call the embed endpoint on heavy server to create user database
-        try {
-          const embedUrl = `${API_CONFIG.heavy.url}${API_CONFIG.heavy.endpoints.embed}`;
-          const embedResponse = await fetch(embedUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-            },
-            mode: "cors",
-            body: JSON.stringify({
-              user_email: session?.user?.email,
-            }),
-          });
-
-          if (!embedResponse.ok) {
-            console.error("Error calling embed endpoint:", embedResponse.statusText);
-          }
-        } catch (embedError) {
-          console.error("Error calling embed endpoint:", embedError);
-        }
-
-        // Show success notification
+        const responseData = await response.json() as {
+          success: boolean;
+          message: string;
+          downloaded_files: string[];
+          total_files: number;
+          processing_combinations: string[];
+          database_created: boolean;
+        };
+        
+        // Show success notification with database creation status
         setShowSuccessNotification(true);
         setShowUploadModal(false);
         setGoogleDriveLink("");
@@ -137,6 +124,9 @@ export default function ChatInterface() {
         setSelectedConverters(["markitdown"]);
         setSelectedChunkers(["paragraph"]);
         setSelectedEmbedders(["bge"]);
+        
+        // Log the response for debugging
+        console.log("Upload response:", responseData);
         
         // Hide success notification after 3 seconds
         setTimeout(() => {
@@ -204,7 +194,10 @@ export default function ChatInterface() {
         <div className="fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2 duration-500">
           <div className="flex items-center gap-2">
             <Check className="h-4 w-4" />
-            <span className="text-sm font-medium">Upload submitted successfully!</span>
+            <span className="text-sm font-medium">Upload completed successfully!</span>
+          </div>
+          <div className="text-xs mt-1 opacity-90">
+            Papers processed and database created automatically
           </div>
         </div>
       )}
