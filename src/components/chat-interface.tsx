@@ -18,6 +18,7 @@ import {
   Trophy,
   Upload,
   X,
+  Copy,
 } from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
@@ -68,6 +69,13 @@ export default function ChatInterface() {
   const [selectedChunkers, setSelectedChunkers] = useState<string[]>(["paragraph"]);
   const [selectedEmbedders, setSelectedEmbedders] = useState<string[]>(["bge"]);
 
+  // Upload modal step management
+  const [uploadStep, setUploadStep] = useState<1 | 2>(1);
+  const [researchArea, setResearchArea] = useState("");
+  const [isScrapingResearch, setIsScrapingResearch] = useState(false);
+  const [scrapedDriveLink, setScrapedDriveLink] = useState("");
+  const [scrapingError, setScrapingError] = useState("");
+
   // Available options
   const availableConverters = ["marker", "openai", "markitdown"];
   const availableChunkers = ["paragraph", "sentence", "word", "fixed_length"];
@@ -82,8 +90,116 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [activeChat?.messages, responseOptions, isLoading]);
 
+  // Research scraping function
+  const handleResearchScrape = async () => {
+    if (!researchArea.trim()) return;
+    
+    // Check if user is logged in
+    if (!session?.user?.email) {
+      setScrapingError("Please log in to scrape research papers");
+      return;
+    }
+
+    setIsScrapingResearch(true);
+    setScrapingError("");
+    
+    try {
+      const scrapeUrl = `${API_CONFIG.light.url}${API_CONFIG.light.endpoints.researchScrape}`;
+      const response = await fetch(scrapeUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        mode: "cors",
+        body: JSON.stringify({
+          research_area: researchArea.trim(),
+          user_email: session.user.email,
+        }),
+      });
+
+      if (response.ok) {
+        // Check if the response is a file (zip)
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/zip")) {
+          // Handle file download
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          
+          // Get filename from Content-Disposition header or create a default one
+          const contentDisposition = response.headers.get("content-disposition");
+          let filename = "research_papers.zip";
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+            if (filenameMatch && filenameMatch[1]) {
+              filename = filenameMatch[1];
+            }
+          }
+          
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          
+          // Get paper count from headers if available
+          const paperCount = response.headers.get("X-Papers-Count");
+          const paperCountText = paperCount ? ` (${paperCount} papers)` : "";
+          
+          // Show success message
+          setScrapedDriveLink(`Downloaded: ${filename}${paperCountText}`);
+        } else {
+          // Handle JSON error response
+          const responseData = await response.json() as {
+            success: boolean;
+            message?: string;
+            error?: string;
+          };
+          setScrapingError(responseData.error || responseData.message || "Failed to scrape research papers");
+        }
+      } else {
+        const errorText = await response.text();
+        setScrapingError(`API Error (${response.status}): ${errorText}`);
+      }
+    } catch (error) {
+      console.error("Error scraping research:", error);
+      setScrapingError(`Network error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsScrapingResearch(false);
+    }
+  };
+
+  // Copy to clipboard function
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Could add a temporary success state here
+    } catch (error) {
+      console.error("Failed to copy to clipboard:", error);
+    }
+  };
+
+  // Reset upload modal state
+  const resetUploadModal = () => {
+    setUploadStep(1);
+    setResearchArea("");
+    setScrapedDriveLink("");
+    setScrapingError("");
+    setGoogleDriveLink("");
+    setSelectedConverters(["markitdown"]);
+    setSelectedChunkers(["paragraph"]);
+    setSelectedEmbedders(["bge"]);
+  };
+
   const handleUploadSubmit = async () => {
     if (!googleDriveLink.trim()) return;
+    
+    // Check if user is logged in
+    if (!session?.user?.email) {
+      console.error("User not logged in");
+      return;
+    }
 
     setIsSubmittingUpload(true);
     
@@ -102,7 +218,7 @@ export default function ChatInterface() {
           converters: selectedConverters,
           chunkers: selectedChunkers,
           embedders: selectedEmbedders,
-          user_email: session?.user?.email,
+          user_email: session.user.email,
         }),
       });
 
@@ -119,11 +235,7 @@ export default function ChatInterface() {
         // Show success notification with database creation status
         setShowSuccessNotification(true);
         setShowUploadModal(false);
-        setGoogleDriveLink("");
-        // Reset selections to defaults
-        setSelectedConverters(["markitdown"]);
-        setSelectedChunkers(["paragraph"]);
-        setSelectedEmbedders(["bge"]);
+        resetUploadModal();
         
         // Log the response for debugging
         console.log("Upload response:", responseData);
@@ -205,183 +317,310 @@ export default function ChatInterface() {
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium text-white">Upload Papers from Google Drive</h3>
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-medium text-white">
+                  {uploadStep === 1 ? "Find Research Papers" : "Upload Papers from Google Drive"}
+                </h3>
+                {/* Step indicators */}
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium",
+                    uploadStep === 1 ? "bg-[#1a7f64] text-white" : "bg-[#2a2a2a] text-zinc-400"
+                  )}>
+                    1
+                  </div>
+                  <div className="w-8 h-px bg-[#2a2a2a]"></div>
+                  <div className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium",
+                    uploadStep === 2 ? "bg-[#1a7f64] text-white" : "bg-[#2a2a2a] text-zinc-400"
+                  )}>
+                    2
+                  </div>
+                </div>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setShowUploadModal(false)}
+                onClick={() => {
+                  setShowUploadModal(false);
+                  resetUploadModal();
+                }}
                 className="h-8 w-8 text-zinc-400 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
             
-            <div className="space-y-6">
-              {/* Google Drive Link */}
-              <div>
-                <label className="text-sm text-zinc-300 mb-2 block">
-                  Google Drive Folder Link
-                </label>
-                <Input
-                  type="url"
-                  value={googleDriveLink}
-                  onChange={(e) => setGoogleDriveLink(e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/..."
-                  className="bg-[#2a2a2a] border-[#3a3a3a] text-white focus:border-[#1a7f64]"
-                />
-                <p className="text-xs text-zinc-500 mt-1">
-                  Provide a public Google Drive folder link containing PDF files
-                </p>
-              </div>
-
-              {/* Processing Options */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Converters */}
-                <div>
-                  <label className="text-sm text-zinc-300 mb-3 block font-medium">
-                    Converters
-                  </label>
-                  <div className="space-y-2">
-                    {availableConverters.map((converter) => (
-                      <label
-                        key={converter}
-                        className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedConverters.includes(converter)}
-                          onChange={() => toggleSelection(converter, selectedConverters, setSelectedConverters)}
-                          className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
-                        />
-                        <span className="text-sm text-zinc-300 capitalize">{converter}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    At least one converter must be selected
+            {uploadStep === 1 ? (
+              /* Step 1: Research Area Input */
+              <div className="space-y-6">
+                <div className="text-center mb-6">
+                  <h4 className="text-sm font-medium text-zinc-300 mb-2">Optional: Let us find research papers for you</h4>
+                  <p className="text-xs text-zinc-500">
+                    Enter an area of research and we'll find and download relevant papers for you to upload to Google Drive, or skip to use your own link
                   </p>
                 </div>
 
-                {/* Chunkers */}
                 <div>
-                  <label className="text-sm text-zinc-300 mb-3 block font-medium">
-                    Chunkers
+                  <label className="text-sm text-zinc-300 mb-2 block">
+                    Research Area or Topic
                   </label>
-                  <div className="space-y-2">
-                    {availableChunkers.map((chunker) => (
-                      <label
-                        key={chunker}
-                        className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedChunkers.includes(chunker)}
-                          onChange={() => toggleSelection(chunker, selectedChunkers, setSelectedChunkers)}
-                          className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
-                        />
-                        <span className="text-sm text-zinc-300 capitalize">{chunker.replace('_', ' ')}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    At least one chunker must be selected
+                  <textarea
+                    value={researchArea}
+                    onChange={(e) => setResearchArea(e.target.value)}
+                    placeholder="e.g., quantum computing algorithms, machine learning in healthcare, sustainable energy solutions..."
+                    className="w-full bg-[#2a2a2a] border-[#3a3a3a] text-white focus:border-[#1a7f64] rounded-md p-3 min-h-[100px] resize-none"
+                    disabled={isScrapingResearch}
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Be specific about your research interests for better results
                   </p>
                 </div>
 
-                {/* Embedders */}
-                <div>
-                  <label className="text-sm text-zinc-300 mb-3 block font-medium">
-                    Embedders
-                  </label>
-                  <div className="space-y-2">
-                    {availableEmbedders.map((embedder) => (
-                      <label
-                        key={embedder}
-                        className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedEmbedders.includes(embedder)}
-                          onChange={() => toggleSelection(embedder, selectedEmbedders, setSelectedEmbedders)}
-                          className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
-                        />
-                        <span className="text-sm text-zinc-300 capitalize">{embedder}</span>
-                      </label>
-                    ))}
+                {/* Scraping Error */}
+                {scrapingError && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                    <p className="text-red-400 text-sm">{scrapingError}</p>
                   </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    At least one embedder must be selected
-                  </p>
+                )}
+
+                {/* Research Papers Downloaded */}
+                {scrapedDriveLink && (
+                  <div className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Check className="h-4 w-4 text-green-400" />
+                      <span className="text-sm font-medium text-green-400">Research Papers Downloaded!</span>
+                    </div>
+                    <div className="text-xs text-zinc-400 mb-3">
+                      {scrapedDriveLink}
+                    </div>
+                    
+                    <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-lg p-3">
+                      <p className="text-sm font-medium text-zinc-300 mb-2">📝 Next Steps:</p>
+                      <ol className="text-xs text-zinc-400 space-y-1 list-decimal list-inside">
+                        <li>Extract the downloaded zip file to access your research papers</li>
+                        <li>Upload the PDF files to a Google Drive folder</li>
+                        <li>Make the Google Drive folder <strong className="text-zinc-300">public</strong> (share settings → "Anyone with the link")</li>
+                        <li>Copy the public folder link and paste it below</li>
+                      </ol>
+                    </div>
+                    
+                    <div className="mt-3 text-xs text-zinc-500">
+                      💡 <strong>Tip:</strong> Making the folder public allows the system to access and process your papers automatically.
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 justify-between pt-4 border-t border-[#3a3a3a]">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setUploadStep(2)}
+                    className="text-zinc-400 hover:text-white"
+                  >
+                    Skip - Use My Own Link
+                  </Button>
+                  <div className="flex gap-3">
+                    {scrapedDriveLink && (
+                      <Button
+                        onClick={() => setUploadStep(2)}
+                        className="bg-[#1a7f64] hover:bg-[#18735a]"
+                      >
+                        Next - Upload to Drive
+                      </Button>
+                    )}
+                    <Button
+                      onClick={handleResearchScrape}
+                      disabled={!researchArea.trim() || isScrapingResearch}
+                      className="bg-[#1a7f64] hover:bg-[#18735a]"
+                    >
+                      {isScrapingResearch ? "Finding Papers..." : "Find Papers"}
+                    </Button>
+                  </div>
                 </div>
               </div>
-
-              {/* Processing Combinations Info */}
-              <div className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 bg-[#1a7f64] rounded-full"></div>
-                  <span className="text-sm font-medium text-zinc-300">Processing Combinations</span>
+            ) : (
+              /* Step 2: Google Drive Upload Form */
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setUploadStep(1)}
+                    className="text-zinc-400 hover:text-white text-sm"
+                  >
+                    ← Back to Research Search
+                  </Button>
                 </div>
-                <p className="text-xs text-zinc-400 mb-2">
-                  {selectedConverters.length} × {selectedChunkers.length} × {selectedEmbedders.length} = {selectedConverters.length * selectedChunkers.length * selectedEmbedders.length} combinations will be processed
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {(() => {
-                    const allCombinations: string[] = [];
-                    selectedConverters.forEach(conv => {
-                      selectedChunkers.forEach(chunk => {
-                        selectedEmbedders.forEach(emb => {
-                          allCombinations.push(`${conv}_${chunk}_${emb}`);
+
+                {/* Google Drive Link */}
+                <div>
+                  <label className="text-sm text-zinc-300 mb-2 block">
+                    Google Drive Folder Link
+                  </label>
+                  <Input
+                    type="url"
+                    value={googleDriveLink}
+                    onChange={(e) => setGoogleDriveLink(e.target.value)}
+                    placeholder="https://drive.google.com/drive/folders/..."
+                    className="bg-[#2a2a2a] border-[#3a3a3a] text-white focus:border-[#1a7f64]"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Provide a public Google Drive folder link containing PDF files
+                  </p>
+                </div>
+
+                {/* Processing Options */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Converters */}
+                  <div>
+                    <label className="text-sm text-zinc-300 mb-3 block font-medium">
+                      Converters
+                    </label>
+                    <div className="space-y-2">
+                      {availableConverters.map((converter) => (
+                        <label
+                          key={converter}
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedConverters.includes(converter)}
+                            onChange={() => toggleSelection(converter, selectedConverters, setSelectedConverters)}
+                            className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
+                          />
+                          <span className="text-sm text-zinc-300 capitalize">{converter}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-2">
+                      At least one converter must be selected
+                    </p>
+                  </div>
+
+                  {/* Chunkers */}
+                  <div>
+                    <label className="text-sm text-zinc-300 mb-3 block font-medium">
+                      Chunkers
+                    </label>
+                    <div className="space-y-2">
+                      {availableChunkers.map((chunker) => (
+                        <label
+                          key={chunker}
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedChunkers.includes(chunker)}
+                            onChange={() => toggleSelection(chunker, selectedChunkers, setSelectedChunkers)}
+                            className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
+                          />
+                          <span className="text-sm text-zinc-300 capitalize">{chunker.replace('_', ' ')}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-2">
+                      At least one chunker must be selected
+                    </p>
+                  </div>
+
+                  {/* Embedders */}
+                  <div>
+                    <label className="text-sm text-zinc-300 mb-3 block font-medium">
+                      Embedders
+                    </label>
+                    <div className="space-y-2">
+                      {availableEmbedders.map((embedder) => (
+                        <label
+                          key={embedder}
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedEmbedders.includes(embedder)}
+                            onChange={() => toggleSelection(embedder, selectedEmbedders, setSelectedEmbedders)}
+                            className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
+                          />
+                          <span className="text-sm text-zinc-300 capitalize">{embedder}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-2">
+                      At least one embedder must be selected
+                    </p>
+                  </div>
+                </div>
+
+                {/* Processing Combinations Info */}
+                <div className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-[#1a7f64] rounded-full"></div>
+                    <span className="text-sm font-medium text-zinc-300">Processing Combinations</span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mb-2">
+                    {selectedConverters.length} × {selectedChunkers.length} × {selectedEmbedders.length} = {selectedConverters.length * selectedChunkers.length * selectedEmbedders.length} combinations will be processed
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {(() => {
+                      const allCombinations: string[] = [];
+                      selectedConverters.forEach(conv => {
+                        selectedChunkers.forEach(chunk => {
+                          selectedEmbedders.forEach(emb => {
+                            allCombinations.push(`${conv}_${chunk}_${emb}`);
+                          });
                         });
                       });
-                    });
-                    
-                    const maxDisplay = 12;
-                    const toShow = allCombinations.slice(0, maxDisplay);
-                    
-                    return (
-                      <>
-                        {toShow.map((combination, index) => (
-                          <span key={`${combination}-${index}`} className="text-xs bg-[#3a3a3a] px-2 py-1 rounded">
-                            {combination}
-                          </span>
-                        ))}
-                        {allCombinations.length > maxDisplay && (
-                          <span className="text-xs text-zinc-500 px-2 py-1">
-                            +{allCombinations.length - maxDisplay} more...
-                          </span>
-                        )}
-                      </>
-                    );
-                  })()}
+                      
+                      const maxDisplay = 12;
+                      const toShow = allCombinations.slice(0, maxDisplay);
+                      
+                      return (
+                        <>
+                          {toShow.map((combination, index) => (
+                            <span key={`${combination}-${index}`} className="text-xs bg-[#3a3a3a] px-2 py-1 rounded">
+                              {combination}
+                            </span>
+                          ))}
+                          {allCombinations.length > maxDisplay && (
+                            <span className="text-xs text-zinc-500 px-2 py-1">
+                              +{allCombinations.length - maxDisplay} more...
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex gap-3 justify-end pt-4 border-t border-[#3a3a3a]">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setShowUploadModal(false);
+                      resetUploadModal();
+                    }}
+                    className="text-zinc-400 hover:text-white"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUploadSubmit}
+                    disabled={
+                      !googleDriveLink.trim() || 
+                      isSubmittingUpload ||
+                      selectedConverters.length === 0 ||
+                      selectedChunkers.length === 0 ||
+                      selectedEmbedders.length === 0
+                    }
+                    className="bg-[#1a7f64] hover:bg-[#18735a]"
+                  >
+                    {isSubmittingUpload ? "Processing..." : "Start Processing"}
+                  </Button>
                 </div>
               </div>
-              
-              {/* Action Buttons */}
-              <div className="flex gap-3 justify-end pt-4 border-t border-[#3a3a3a]">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowUploadModal(false)}
-                  className="text-zinc-400 hover:text-white"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleUploadSubmit}
-                  disabled={
-                    !googleDriveLink.trim() || 
-                    isSubmittingUpload ||
-                    selectedConverters.length === 0 ||
-                    selectedChunkers.length === 0 ||
-                    selectedEmbedders.length === 0
-                  }
-                  className="bg-[#1a7f64] hover:bg-[#18735a]"
-                >
-                  {isSubmittingUpload ? "Processing..." : "Start Processing"}
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -491,7 +730,10 @@ export default function ChatInterface() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowUploadModal(true)}
+              onClick={() => {
+                resetUploadModal();
+                setShowUploadModal(true);
+              }}
               className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 group mr-2"
             >
               <Upload className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:-translate-y-0.5" />
