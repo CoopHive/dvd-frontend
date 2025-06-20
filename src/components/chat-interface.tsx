@@ -66,7 +66,7 @@ export default function ChatInterface() {
 
   // Processing options state
   const [selectedConverters, setSelectedConverters] = useState<string[]>(["markitdown"]);
-  const [selectedChunkers, setSelectedChunkers] = useState<string[]>(["paragraph"]);
+  const [selectedChunkers, setSelectedChunkers] = useState<string[]>(["recursive"]);
   const [selectedEmbedders, setSelectedEmbedders] = useState<string[]>(["bge"]);
 
   // Upload modal step management
@@ -78,7 +78,7 @@ export default function ChatInterface() {
 
   // Available options
   const availableConverters = ["marker", "openai", "markitdown"];
-  const availableChunkers = ["paragraph", "sentence", "word", "fixed_length"];
+  const availableChunkers = ["fixed_length", "recursive", "markdown_aware", "semantic_split"];
   const availableEmbedders = ["openai", "bge"];
 
   // Auto-scroll logic
@@ -188,7 +188,7 @@ export default function ChatInterface() {
     setScrapingError("");
     setGoogleDriveLink("");
     setSelectedConverters(["markitdown"]);
-    setSelectedChunkers(["paragraph"]);
+    setSelectedChunkers(["recursive"]);
     setSelectedEmbedders(["bge"]);
   };
 
