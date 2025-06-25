@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -18,7 +18,6 @@ import {
   Trophy,
   Upload,
   X,
-  Copy,
 } from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
@@ -52,6 +51,10 @@ export default function ChatInterface() {
     // Pull in the new dropdown state and setter:
     openRouterModel,
     setOpenRouterModel,
+    // Pull in upload status:
+    uploadStatus,
+    setUploadStatus,
+    clearUploadStatus,
   } = useChat();
 
   const { data: session } = useSession();
@@ -63,6 +66,9 @@ export default function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  // Upload status tracking - now managed by useChat hook
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
 
   // Processing options state
   const [selectedConverters, setSelectedConverters] = useState<string[]>(["markitdown"]);
@@ -81,6 +87,54 @@ export default function ChatInterface() {
   const availableChunkers = ["fixed_length", "recursive", "markdown_aware", "semantic_split"];
   const availableEmbedders = ["openai", "bge"];
 
+  // Check upload status function
+  const checkUploadStatus = useCallback(async () => {
+    if (!session?.user?.email) return;
+
+    setIsRefreshingStatus(true);
+    
+    try {
+      const statusUrl = `${API_CONFIG.light.url}/api/status?user_email=${encodeURIComponent(session.user.email)}`;
+      const response = await fetch(statusUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        mode: "cors",
+      });
+
+      if (response.ok) {
+        const statusData = await response.json() as {
+          total_jobs: number;
+          completed_jobs: number;
+          completion_percentage: number;
+        };
+        
+        const newStatus = {
+          isTracking: true,
+          totalJobs: statusData.total_jobs,
+          completedJobs: statusData.completed_jobs,
+          percentage: statusData.completion_percentage,
+        };
+        
+        setUploadStatus(newStatus);
+        
+        // Switch back to upload mode if >90% complete
+        if (statusData.completion_percentage > 90) {
+          setTimeout(() => {
+            clearUploadStatus();
+          }, 2000); // Give user time to see completion
+        }
+      } else {
+        console.error("Failed to fetch upload status");
+      }
+    } catch (error) {
+      console.error("Error checking upload status:", error);
+    } finally {
+      setIsRefreshingStatus(false);
+    }
+  }, [session?.user?.email, setUploadStatus, clearUploadStatus]);
+
   // Auto-scroll logic
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -89,6 +143,21 @@ export default function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [activeChat?.messages, responseOptions, isLoading]);
+
+  // Auto-check upload status on component load if tracking is in progress
+  useEffect(() => {
+    if (uploadStatus.isTracking && session?.user?.email) {
+      // Check status immediately if we have a tracking session
+      void checkUploadStatus();
+      
+      // Set up interval to check status every 3 seconds
+      const interval = setInterval(() => {
+        void checkUploadStatus();
+      }, 3000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [uploadStatus.isTracking, session?.user?.email, checkUploadStatus]);
 
   // Research scraping function
   const handleResearchScrape = async () => {
@@ -120,7 +189,7 @@ export default function ChatInterface() {
       if (response.ok) {
         // Check if the response is a file (zip)
         const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/zip")) {
+        if (contentType?.includes("application/zip")) {
           // Handle file download
           const blob = await response.blob();
           const url = window.URL.createObjectURL(blob);
@@ -131,8 +200,9 @@ export default function ChatInterface() {
           const contentDisposition = response.headers.get("content-disposition");
           let filename = "research_papers.zip";
           if (contentDisposition) {
-            const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-            if (filenameMatch && filenameMatch[1]) {
+            const filenameRegex = /filename="?([^"]+)"?/;
+            const filenameMatch = filenameRegex.exec(contentDisposition);
+            if (filenameMatch?.[1]) {
               filename = filenameMatch[1];
             }
           }
@@ -148,7 +218,7 @@ export default function ChatInterface() {
           const paperCountText = paperCount ? ` (${paperCount} papers)` : "";
           
           // Show success message
-          setScrapedDriveLink(`Downloaded: ${filename}${paperCountText}`);
+          setScrapedDriveLink(`Downloaded: ${filename}${paperCountText ?? ""}`);
         } else {
           // Handle JSON error response
           const responseData = await response.json() as {
@@ -156,7 +226,7 @@ export default function ChatInterface() {
             message?: string;
             error?: string;
           };
-          setScrapingError(responseData.error || responseData.message || "Failed to scrape research papers");
+          setScrapingError(responseData.error ?? responseData.message ?? "Failed to scrape research papers");
         }
       } else {
         const errorText = await response.text();
@@ -169,17 +239,7 @@ export default function ChatInterface() {
       setIsScrapingResearch(false);
     }
   };
-
-  // Copy to clipboard function
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      // Could add a temporary success state here
-    } catch (error) {
-      console.error("Failed to copy to clipboard:", error);
-    }
-  };
-
+  
   // Reset upload modal state
   const resetUploadModal = () => {
     setUploadStep(1);
@@ -201,11 +261,13 @@ export default function ChatInterface() {
       return;
     }
 
+    console.log("Starting upload submission...");
     setIsSubmittingUpload(true);
     
     try {
       // Use heavy server for upload/ingest operations
       const uploadUrl = `${API_CONFIG.heavy.url}${API_CONFIG.heavy.endpoints.ingest}`;
+      console.log("Sending request to:", uploadUrl);
       const response = await fetch(uploadUrl, {
         method: "POST",
         headers: {
@@ -222,29 +284,58 @@ export default function ChatInterface() {
         }),
       });
 
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
+
       if (response.ok) {
+        console.log("Upload response successful, parsing JSON...");
         const responseData = await response.json() as {
           success: boolean;
           message: string;
           downloaded_files: string[];
           total_files: number;
           processing_combinations: string[];
-          database_created: boolean;
+          processing_started: boolean;
         };
         
-        // Show success notification with database creation status
+        console.log("Upload response:", responseData);
+        console.log("Processing combinations:", responseData.processing_combinations);
+        console.log("Total files:", responseData.total_files);
+        
+        // Calculate total jobs
+        const totalJobs = (responseData.processing_combinations.length * responseData.total_files) * 2;
+        console.log("Calculated total jobs:", totalJobs);
+        
+        // Show success notification
         setShowSuccessNotification(true);
         setShowUploadModal(false);
         resetUploadModal();
         
-        // Log the response for debugging
-        console.log("Upload response:", responseData);
+        // Start status tracking
+        const newStatus = {
+          isTracking: true,
+          totalJobs: totalJobs,
+          completedJobs: 0,
+          percentage: 0,
+        };
+        console.log("About to call setUploadStatus with:", newStatus);
+        setUploadStatus(newStatus);
+        console.log("setUploadStatus called, current uploadStatus:", uploadStatus);
+        
+        // Check status immediately
+        setTimeout(() => {
+          console.log("Calling checkUploadStatus after 1 second");
+          void checkUploadStatus();
+        }, 1000);
         
         // Hide success notification after 3 seconds
         setTimeout(() => {
           setShowSuccessNotification(false);
         }, 3000);
       } else {
+        console.error("Upload failed with status:", response.status);
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
         throw new Error("Upload failed");
       }
     } catch (error) {
@@ -252,6 +343,7 @@ export default function ChatInterface() {
       // Handle error - could show a toast or error state
     } finally {
       setIsSubmittingUpload(false);
+      console.log("Upload submission completed");
     }
   };
 
@@ -299,6 +391,9 @@ export default function ChatInterface() {
     }
   };
 
+  // Debug: Log upload status on every render
+  console.log("Render: uploadStatus =", uploadStatus);
+
   return (
     <div className="flex h-screen bg-[#0f0f0f]">
       {/* Success Notification */}
@@ -306,10 +401,10 @@ export default function ChatInterface() {
         <div className="fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2 duration-500">
           <div className="flex items-center gap-2">
             <Check className="h-4 w-4" />
-            <span className="text-sm font-medium">Upload completed successfully!</span>
+            <span className="text-sm font-medium">Processing started successfully!</span>
           </div>
           <div className="text-xs mt-1 opacity-90">
-            Papers processed and database created automatically
+            Papers are being processed in the background
           </div>
         </div>
       )}
@@ -359,7 +454,7 @@ export default function ChatInterface() {
                 <div className="text-center mb-6">
                   <h4 className="text-sm font-medium text-zinc-300 mb-2">Optional: Let us find research papers for you</h4>
                   <p className="text-xs text-zinc-500">
-                    Enter an area of research and we'll find and download relevant papers for you to upload to Google Drive, or skip to use your own link
+                    Enter an area of research and we&apos;ll find and download relevant papers for you to upload to Google Drive, or skip to use your own link
                   </p>
                 </div>
 
@@ -402,7 +497,7 @@ export default function ChatInterface() {
                       <ol className="text-xs text-zinc-400 space-y-1 list-decimal list-inside">
                         <li>Extract the downloaded zip file to access your research papers</li>
                         <li>Upload the PDF files to a Google Drive folder</li>
-                        <li>Make the Google Drive folder <strong className="text-zinc-300">public</strong> (share settings → "Anyone with the link")</li>
+                        <li>Make the Google Drive folder <strong className="text-zinc-300">public</strong> (share settings → &ldquo;Anyone with the link&rdquo;)</li>
                         <li>Copy the public folder link and paste it below</li>
                       </ol>
                     </div>
@@ -716,29 +811,65 @@ export default function ChatInterface() {
               onChange={(e) => setOpenRouterModel(e.target.value)}
               className="bg-[#2a2a2a] text-zinc-300 border-none rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1a7f64] focus:border-[#1a7f64]"
             >
-              <option value="openai/gpt-4.1">gpt-4.1</option>
-              <option value="anthropic/claude-3.7-sonnet">claude-3.7-sonnet</option>
-              <option value="google/gemini-2.5-pro-preview">gemini-2.5-pro-preview</option>
-              <option value="x-ai/grok-3-beta">grok-3-beta</option>
-              <option value="deepseek/deepseek-r1-0528">deepseek-r1-0528</option>
-              <option value="meta-llama/llama-4-maverick">llama-4-maverick</option>
+              <option value="openai/gpt-4o-mini">gpt-4o-mini</option>
+              <option value="openai/gpt-4o">gpt-4o</option>
+              <option value="anthropic/claude-3.5-sonnet">claude-3.5-sonnet</option>
+              <option value="google/gemini-pro-1.5">gemini-pro-1.5</option>
+              <option value="meta-llama/llama-3.1-70b-instruct">llama-3.1-70b</option>
+              <option value="mistralai/mistral-7b-instruct">mistral-7b</option>
             </select>
           </div>
 
           <div className="ml-auto flex items-center space-x-2">
-            {/* Upload Papers Button - simplified, no progress tracking */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                resetUploadModal();
-                setShowUploadModal(true);
-              }}
-              className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 group mr-2"
-            >
-              <Upload className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:-translate-y-0.5" />
-              Upload Papers
-            </Button>
+            {/* Upload Papers Button or Status Bar */}
+            {uploadStatus.isTracking ? (
+              /* Status Bar */
+              <div className="flex items-center gap-2 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg px-3 py-2 min-w-[200px]">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-zinc-300 font-medium">Processing Papers</span>
+                    <span className="text-xs text-zinc-400">
+                      {uploadStatus.completedJobs}/{uploadStatus.totalJobs}
+                    </span>
+                  </div>
+                  <div className="w-full bg-[#1a1a1a] rounded-full h-2">
+                    <div 
+                      className="bg-[#1a7f64] h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(uploadStatus.percentage, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    {uploadStatus.percentage.toFixed(1)}% complete
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void checkUploadStatus()}
+                  disabled={isRefreshingStatus}
+                  className="h-8 w-8 text-zinc-400 hover:text-white flex-shrink-0"
+                  title="Refresh status"
+                >
+                  <div className={cn("h-4 w-4", isRefreshingStatus && "animate-spin")}>
+                    🔄
+                  </div>
+                </Button>
+              </div>
+            ) : (
+              /* Upload Papers Button */
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  resetUploadModal();
+                  setShowUploadModal(true);
+                }}
+                className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 group mr-2"
+              >
+                <Upload className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:-translate-y-0.5" />
+                Upload Papers
+              </Button>
+            )}
 
             {/* Response Mode Toggle */}
             <div className="flex items-center gap-2 mr-4">

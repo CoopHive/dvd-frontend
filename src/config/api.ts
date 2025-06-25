@@ -22,12 +22,12 @@ export const API_CONFIG = {
       health: "/health"
     }
   },
-  model: "openai/gpt-3.5-turbo-0613",
+  model: "openai/gpt-4o-mini",
 };
 
 // OpenRouter API configuration
 export const OPENROUTER_CONFIG = {
   url: "https://openrouter.ai/api/v1/chat/completions",
-  defaultModel: "openai/gpt-3.5-turbo",
   apiKey: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ?? "",
+  defaultModel: "openai/gpt-4o-mini",
 }; 
