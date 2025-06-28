@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -51,6 +51,10 @@ export default function ChatInterface() {
     // Pull in the new dropdown state and setter:
     openRouterModel,
     setOpenRouterModel,
+    // Pull in upload status:
+    uploadStatus,
+    setUploadStatus,
+    clearUploadStatus,
   } = useChat();
 
   const { data: session } = useSession();
@@ -63,15 +67,73 @@ export default function ChatInterface() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
+  // Upload status tracking - now managed by useChat hook
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
+
   // Processing options state
   const [selectedConverters, setSelectedConverters] = useState<string[]>(["markitdown"]);
-  const [selectedChunkers, setSelectedChunkers] = useState<string[]>(["paragraph"]);
+  const [selectedChunkers, setSelectedChunkers] = useState<string[]>(["recursive"]);
   const [selectedEmbedders, setSelectedEmbedders] = useState<string[]>(["bge"]);
+
+  // Upload modal step management
+  const [uploadStep, setUploadStep] = useState<1 | 2>(1);
+  const [researchArea, setResearchArea] = useState("");
+  const [isScrapingResearch, setIsScrapingResearch] = useState(false);
+  const [scrapedDriveLink, setScrapedDriveLink] = useState("");
+  const [scrapingError, setScrapingError] = useState("");
 
   // Available options
   const availableConverters = ["marker", "openai", "markitdown"];
-  const availableChunkers = ["paragraph", "sentence", "word", "fixed_length"];
+  const availableChunkers = ["fixed_length", "recursive", "markdown_aware", "semantic_split"];
   const availableEmbedders = ["openai", "bge"];
+
+  // Check upload status function
+  const checkUploadStatus = useCallback(async () => {
+    if (!session?.user?.email) return;
+
+    setIsRefreshingStatus(true);
+    
+    try {
+      const statusUrl = `${API_CONFIG.light.url}/api/status?user_email=${encodeURIComponent(session.user.email)}`;
+      const response = await fetch(statusUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        mode: "cors",
+      });
+
+      if (response.ok) {
+        const statusData = await response.json() as {
+          total_jobs: number;
+          completed_jobs: number;
+          completion_percentage: number;
+        };
+        
+        const newStatus = {
+          isTracking: true,
+          totalJobs: statusData.total_jobs,
+          completedJobs: statusData.completed_jobs,
+          percentage: statusData.completion_percentage,
+        };
+        
+        setUploadStatus(newStatus);
+        
+        // Switch back to upload mode if >90% complete
+        if (statusData.completion_percentage > 90) {
+          setTimeout(() => {
+            clearUploadStatus();
+          }, 2000); // Give user time to see completion
+        }
+      } else {
+        console.error("Failed to fetch upload status");
+      }
+    } catch (error) {
+      console.error("Error checking upload status:", error);
+    } finally {
+      setIsRefreshingStatus(false);
+    }
+  }, [session?.user?.email, setUploadStatus, clearUploadStatus]);
 
   // Auto-scroll logic
   const scrollToBottom = () => {
@@ -82,14 +144,130 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [activeChat?.messages, responseOptions, isLoading]);
 
+  // Auto-check upload status on component load if tracking is in progress
+  useEffect(() => {
+    if (uploadStatus.isTracking && session?.user?.email) {
+      // Check status immediately if we have a tracking session
+      void checkUploadStatus();
+      
+      // Set up interval to check status every 3 seconds
+      const interval = setInterval(() => {
+        void checkUploadStatus();
+      }, 3000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [uploadStatus.isTracking, session?.user?.email, checkUploadStatus]);
+
+  // Research scraping function
+  const handleResearchScrape = async () => {
+    if (!researchArea.trim()) return;
+    
+    // Check if user is logged in
+    if (!session?.user?.email) {
+      setScrapingError("Please log in to scrape research papers");
+      return;
+    }
+
+    setIsScrapingResearch(true);
+    setScrapingError("");
+    
+    try {
+      const scrapeUrl = `${API_CONFIG.light.url}${API_CONFIG.light.endpoints.researchScrape}`;
+      const response = await fetch(scrapeUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        mode: "cors",
+        body: JSON.stringify({
+          research_area: researchArea.trim(),
+          user_email: session.user.email,
+        }),
+      });
+
+      if (response.ok) {
+        // Check if the response is a file (zip)
+        const contentType = response.headers.get("content-type");
+        if (contentType?.includes("application/zip")) {
+          // Handle file download
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          
+          // Get filename from Content-Disposition header or create a default one
+          const contentDisposition = response.headers.get("content-disposition");
+          let filename = "research_papers.zip";
+          if (contentDisposition) {
+            const filenameRegex = /filename="?([^"]+)"?/;
+            const filenameMatch = filenameRegex.exec(contentDisposition);
+            if (filenameMatch?.[1]) {
+              filename = filenameMatch[1];
+            }
+          }
+          
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          
+          // Get paper count from headers if available
+          const paperCount = response.headers.get("X-Papers-Count");
+          const paperCountText = paperCount ? ` (${paperCount} papers)` : "";
+          
+          // Show success message
+          setScrapedDriveLink(`Downloaded: ${filename}${paperCountText ?? ""}`);
+        } else {
+          // Handle JSON error response
+          const responseData = await response.json() as {
+            success: boolean;
+            message?: string;
+            error?: string;
+          };
+          setScrapingError(responseData.error ?? responseData.message ?? "Failed to scrape research papers");
+        }
+      } else {
+        const errorText = await response.text();
+        setScrapingError(`API Error (${response.status}): ${errorText}`);
+      }
+    } catch (error) {
+      console.error("Error scraping research:", error);
+      setScrapingError(`Network error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsScrapingResearch(false);
+    }
+  };
+  
+  // Reset upload modal state
+  const resetUploadModal = () => {
+    setUploadStep(1);
+    setResearchArea("");
+    setScrapedDriveLink("");
+    setScrapingError("");
+    setGoogleDriveLink("");
+    setSelectedConverters(["markitdown"]);
+    setSelectedChunkers(["recursive"]);
+    setSelectedEmbedders(["bge"]);
+  };
+
   const handleUploadSubmit = async () => {
     if (!googleDriveLink.trim()) return;
+    
+    // Check if user is logged in
+    if (!session?.user?.email) {
+      console.error("User not logged in");
+      return;
+    }
 
+    console.log("Starting upload submission...");
     setIsSubmittingUpload(true);
     
     try {
       // Use heavy server for upload/ingest operations
       const uploadUrl = `${API_CONFIG.heavy.url}${API_CONFIG.heavy.endpoints.ingest}`;
+      console.log("Sending request to:", uploadUrl);
       const response = await fetch(uploadUrl, {
         method: "POST",
         headers: {
@@ -102,37 +280,62 @@ export default function ChatInterface() {
           converters: selectedConverters,
           chunkers: selectedChunkers,
           embedders: selectedEmbedders,
-          user_email: session?.user?.email,
+          user_email: session.user.email,
         }),
       });
 
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
+
       if (response.ok) {
+        console.log("Upload response successful, parsing JSON...");
         const responseData = await response.json() as {
           success: boolean;
           message: string;
           downloaded_files: string[];
           total_files: number;
           processing_combinations: string[];
-          database_created: boolean;
+          processing_started: boolean;
         };
         
-        // Show success notification with database creation status
+        console.log("Upload response:", responseData);
+        console.log("Processing combinations:", responseData.processing_combinations);
+        console.log("Total files:", responseData.total_files);
+        
+        // Calculate total jobs
+        const totalJobs = (responseData.processing_combinations.length * responseData.total_files) * 2;
+        console.log("Calculated total jobs:", totalJobs);
+        
+        // Show success notification
         setShowSuccessNotification(true);
         setShowUploadModal(false);
-        setGoogleDriveLink("");
-        // Reset selections to defaults
-        setSelectedConverters(["markitdown"]);
-        setSelectedChunkers(["paragraph"]);
-        setSelectedEmbedders(["bge"]);
+        resetUploadModal();
         
-        // Log the response for debugging
-        console.log("Upload response:", responseData);
+        // Start status tracking
+        const newStatus = {
+          isTracking: true,
+          totalJobs: totalJobs,
+          completedJobs: 0,
+          percentage: 0,
+        };
+        console.log("About to call setUploadStatus with:", newStatus);
+        setUploadStatus(newStatus);
+        console.log("setUploadStatus called, current uploadStatus:", uploadStatus);
+        
+        // Check status immediately
+        setTimeout(() => {
+          console.log("Calling checkUploadStatus after 1 second");
+          void checkUploadStatus();
+        }, 1000);
         
         // Hide success notification after 3 seconds
         setTimeout(() => {
           setShowSuccessNotification(false);
         }, 3000);
       } else {
+        console.error("Upload failed with status:", response.status);
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
         throw new Error("Upload failed");
       }
     } catch (error) {
@@ -140,6 +343,7 @@ export default function ChatInterface() {
       // Handle error - could show a toast or error state
     } finally {
       setIsSubmittingUpload(false);
+      console.log("Upload submission completed");
     }
   };
 
@@ -187,6 +391,9 @@ export default function ChatInterface() {
     }
   };
 
+  // Debug: Log upload status on every render
+  console.log("Render: uploadStatus =", uploadStatus);
+
   return (
     <div className="flex h-screen bg-[#0f0f0f]">
       {/* Success Notification */}
@@ -194,10 +401,10 @@ export default function ChatInterface() {
         <div className="fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2 duration-500">
           <div className="flex items-center gap-2">
             <Check className="h-4 w-4" />
-            <span className="text-sm font-medium">Upload completed successfully!</span>
+            <span className="text-sm font-medium">Processing started successfully!</span>
           </div>
           <div className="text-xs mt-1 opacity-90">
-            Papers processed and database created automatically
+            Papers are being processed in the background
           </div>
         </div>
       )}
@@ -205,183 +412,310 @@ export default function ChatInterface() {
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium text-white">Upload Papers from Google Drive</h3>
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-medium text-white">
+                  {uploadStep === 1 ? "Find Research Papers" : "Upload Papers from Google Drive"}
+                </h3>
+                {/* Step indicators */}
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium",
+                    uploadStep === 1 ? "bg-[#1a7f64] text-white" : "bg-[#2a2a2a] text-zinc-400"
+                  )}>
+                    1
+                  </div>
+                  <div className="w-8 h-px bg-[#2a2a2a]"></div>
+                  <div className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium",
+                    uploadStep === 2 ? "bg-[#1a7f64] text-white" : "bg-[#2a2a2a] text-zinc-400"
+                  )}>
+                    2
+                  </div>
+                </div>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setShowUploadModal(false)}
+                onClick={() => {
+                  setShowUploadModal(false);
+                  resetUploadModal();
+                }}
                 className="h-8 w-8 text-zinc-400 hover:text-white"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
             
-            <div className="space-y-6">
-              {/* Google Drive Link */}
-              <div>
-                <label className="text-sm text-zinc-300 mb-2 block">
-                  Google Drive Folder Link
-                </label>
-                <Input
-                  type="url"
-                  value={googleDriveLink}
-                  onChange={(e) => setGoogleDriveLink(e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/..."
-                  className="bg-[#2a2a2a] border-[#3a3a3a] text-white focus:border-[#1a7f64]"
-                />
-                <p className="text-xs text-zinc-500 mt-1">
-                  Provide a public Google Drive folder link containing PDF files
-                </p>
-              </div>
-
-              {/* Processing Options */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Converters */}
-                <div>
-                  <label className="text-sm text-zinc-300 mb-3 block font-medium">
-                    Converters
-                  </label>
-                  <div className="space-y-2">
-                    {availableConverters.map((converter) => (
-                      <label
-                        key={converter}
-                        className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedConverters.includes(converter)}
-                          onChange={() => toggleSelection(converter, selectedConverters, setSelectedConverters)}
-                          className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
-                        />
-                        <span className="text-sm text-zinc-300 capitalize">{converter}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    At least one converter must be selected
+            {uploadStep === 1 ? (
+              /* Step 1: Research Area Input */
+              <div className="space-y-6">
+                <div className="text-center mb-6">
+                  <h4 className="text-sm font-medium text-zinc-300 mb-2">Optional: Let us find research papers for you</h4>
+                  <p className="text-xs text-zinc-500">
+                    Enter an area of research and we&apos;ll find and download relevant papers for you to upload to Google Drive, or skip to use your own link
                   </p>
                 </div>
 
-                {/* Chunkers */}
                 <div>
-                  <label className="text-sm text-zinc-300 mb-3 block font-medium">
-                    Chunkers
+                  <label className="text-sm text-zinc-300 mb-2 block">
+                    Research Area or Topic
                   </label>
-                  <div className="space-y-2">
-                    {availableChunkers.map((chunker) => (
-                      <label
-                        key={chunker}
-                        className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedChunkers.includes(chunker)}
-                          onChange={() => toggleSelection(chunker, selectedChunkers, setSelectedChunkers)}
-                          className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
-                        />
-                        <span className="text-sm text-zinc-300 capitalize">{chunker.replace('_', ' ')}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    At least one chunker must be selected
+                  <textarea
+                    value={researchArea}
+                    onChange={(e) => setResearchArea(e.target.value)}
+                    placeholder="e.g., quantum computing algorithms, machine learning in healthcare, sustainable energy solutions..."
+                    className="w-full bg-[#2a2a2a] border-[#3a3a3a] text-white focus:border-[#1a7f64] rounded-md p-3 min-h-[100px] resize-none"
+                    disabled={isScrapingResearch}
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Be specific about your research interests for better results
                   </p>
                 </div>
 
-                {/* Embedders */}
-                <div>
-                  <label className="text-sm text-zinc-300 mb-3 block font-medium">
-                    Embedders
-                  </label>
-                  <div className="space-y-2">
-                    {availableEmbedders.map((embedder) => (
-                      <label
-                        key={embedder}
-                        className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedEmbedders.includes(embedder)}
-                          onChange={() => toggleSelection(embedder, selectedEmbedders, setSelectedEmbedders)}
-                          className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
-                        />
-                        <span className="text-sm text-zinc-300 capitalize">{embedder}</span>
-                      </label>
-                    ))}
+                {/* Scraping Error */}
+                {scrapingError && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                    <p className="text-red-400 text-sm">{scrapingError}</p>
                   </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    At least one embedder must be selected
-                  </p>
+                )}
+
+                {/* Research Papers Downloaded */}
+                {scrapedDriveLink && (
+                  <div className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Check className="h-4 w-4 text-green-400" />
+                      <span className="text-sm font-medium text-green-400">Research Papers Downloaded!</span>
+                    </div>
+                    <div className="text-xs text-zinc-400 mb-3">
+                      {scrapedDriveLink}
+                    </div>
+                    
+                    <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-lg p-3">
+                      <p className="text-sm font-medium text-zinc-300 mb-2">📝 Next Steps:</p>
+                      <ol className="text-xs text-zinc-400 space-y-1 list-decimal list-inside">
+                        <li>Extract the downloaded zip file to access your research papers</li>
+                        <li>Upload the PDF files to a Google Drive folder</li>
+                        <li>Make the Google Drive folder <strong className="text-zinc-300">public</strong> (share settings → &ldquo;Anyone with the link&rdquo;)</li>
+                        <li>Copy the public folder link and paste it below</li>
+                      </ol>
+                    </div>
+                    
+                    <div className="mt-3 text-xs text-zinc-500">
+                      💡 <strong>Tip:</strong> Making the folder public allows the system to access and process your papers automatically.
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 justify-between pt-4 border-t border-[#3a3a3a]">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setUploadStep(2)}
+                    className="text-zinc-400 hover:text-white"
+                  >
+                    Skip - Use My Own Link
+                  </Button>
+                  <div className="flex gap-3">
+                    {scrapedDriveLink && (
+                      <Button
+                        onClick={() => setUploadStep(2)}
+                        className="bg-[#1a7f64] hover:bg-[#18735a]"
+                      >
+                        Next - Upload to Drive
+                      </Button>
+                    )}
+                    <Button
+                      onClick={handleResearchScrape}
+                      disabled={!researchArea.trim() || isScrapingResearch}
+                      className="bg-[#1a7f64] hover:bg-[#18735a]"
+                    >
+                      {isScrapingResearch ? "Finding Papers..." : "Find Papers"}
+                    </Button>
+                  </div>
                 </div>
               </div>
-
-              {/* Processing Combinations Info */}
-              <div className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 bg-[#1a7f64] rounded-full"></div>
-                  <span className="text-sm font-medium text-zinc-300">Processing Combinations</span>
+            ) : (
+              /* Step 2: Google Drive Upload Form */
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setUploadStep(1)}
+                    className="text-zinc-400 hover:text-white text-sm"
+                  >
+                    ← Back to Research Search
+                  </Button>
                 </div>
-                <p className="text-xs text-zinc-400 mb-2">
-                  {selectedConverters.length} × {selectedChunkers.length} × {selectedEmbedders.length} = {selectedConverters.length * selectedChunkers.length * selectedEmbedders.length} combinations will be processed
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {(() => {
-                    const allCombinations: string[] = [];
-                    selectedConverters.forEach(conv => {
-                      selectedChunkers.forEach(chunk => {
-                        selectedEmbedders.forEach(emb => {
-                          allCombinations.push(`${conv}_${chunk}_${emb}`);
+
+                {/* Google Drive Link */}
+                <div>
+                  <label className="text-sm text-zinc-300 mb-2 block">
+                    Google Drive Folder Link
+                  </label>
+                  <Input
+                    type="url"
+                    value={googleDriveLink}
+                    onChange={(e) => setGoogleDriveLink(e.target.value)}
+                    placeholder="https://drive.google.com/drive/folders/..."
+                    className="bg-[#2a2a2a] border-[#3a3a3a] text-white focus:border-[#1a7f64]"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Provide a public Google Drive folder link containing PDF files
+                  </p>
+                </div>
+
+                {/* Processing Options */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Converters */}
+                  <div>
+                    <label className="text-sm text-zinc-300 mb-3 block font-medium">
+                      Converters
+                    </label>
+                    <div className="space-y-2">
+                      {availableConverters.map((converter) => (
+                        <label
+                          key={converter}
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedConverters.includes(converter)}
+                            onChange={() => toggleSelection(converter, selectedConverters, setSelectedConverters)}
+                            className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
+                          />
+                          <span className="text-sm text-zinc-300 capitalize">{converter}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-2">
+                      At least one converter must be selected
+                    </p>
+                  </div>
+
+                  {/* Chunkers */}
+                  <div>
+                    <label className="text-sm text-zinc-300 mb-3 block font-medium">
+                      Chunkers
+                    </label>
+                    <div className="space-y-2">
+                      {availableChunkers.map((chunker) => (
+                        <label
+                          key={chunker}
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedChunkers.includes(chunker)}
+                            onChange={() => toggleSelection(chunker, selectedChunkers, setSelectedChunkers)}
+                            className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
+                          />
+                          <span className="text-sm text-zinc-300 capitalize">{chunker.replace('_', ' ')}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-2">
+                      At least one chunker must be selected
+                    </p>
+                  </div>
+
+                  {/* Embedders */}
+                  <div>
+                    <label className="text-sm text-zinc-300 mb-3 block font-medium">
+                      Embedders
+                    </label>
+                    <div className="space-y-2">
+                      {availableEmbedders.map((embedder) => (
+                        <label
+                          key={embedder}
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-[#2a2a2a] p-2 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedEmbedders.includes(embedder)}
+                            onChange={() => toggleSelection(embedder, selectedEmbedders, setSelectedEmbedders)}
+                            className="w-4 h-4 text-[#1a7f64] bg-[#2a2a2a] border-[#3a3a3a] rounded focus:ring-[#1a7f64] focus:ring-2"
+                          />
+                          <span className="text-sm text-zinc-300 capitalize">{embedder}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-2">
+                      At least one embedder must be selected
+                    </p>
+                  </div>
+                </div>
+
+                {/* Processing Combinations Info */}
+                <div className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-[#1a7f64] rounded-full"></div>
+                    <span className="text-sm font-medium text-zinc-300">Processing Combinations</span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mb-2">
+                    {selectedConverters.length} × {selectedChunkers.length} × {selectedEmbedders.length} = {selectedConverters.length * selectedChunkers.length * selectedEmbedders.length} combinations will be processed
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {(() => {
+                      const allCombinations: string[] = [];
+                      selectedConverters.forEach(conv => {
+                        selectedChunkers.forEach(chunk => {
+                          selectedEmbedders.forEach(emb => {
+                            allCombinations.push(`${conv}_${chunk}_${emb}`);
+                          });
                         });
                       });
-                    });
-                    
-                    const maxDisplay = 12;
-                    const toShow = allCombinations.slice(0, maxDisplay);
-                    
-                    return (
-                      <>
-                        {toShow.map((combination, index) => (
-                          <span key={`${combination}-${index}`} className="text-xs bg-[#3a3a3a] px-2 py-1 rounded">
-                            {combination}
-                          </span>
-                        ))}
-                        {allCombinations.length > maxDisplay && (
-                          <span className="text-xs text-zinc-500 px-2 py-1">
-                            +{allCombinations.length - maxDisplay} more...
-                          </span>
-                        )}
-                      </>
-                    );
-                  })()}
+                      
+                      const maxDisplay = 12;
+                      const toShow = allCombinations.slice(0, maxDisplay);
+                      
+                      return (
+                        <>
+                          {toShow.map((combination, index) => (
+                            <span key={`${combination}-${index}`} className="text-xs bg-[#3a3a3a] px-2 py-1 rounded">
+                              {combination}
+                            </span>
+                          ))}
+                          {allCombinations.length > maxDisplay && (
+                            <span className="text-xs text-zinc-500 px-2 py-1">
+                              +{allCombinations.length - maxDisplay} more...
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex gap-3 justify-end pt-4 border-t border-[#3a3a3a]">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setShowUploadModal(false);
+                      resetUploadModal();
+                    }}
+                    className="text-zinc-400 hover:text-white"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUploadSubmit}
+                    disabled={
+                      !googleDriveLink.trim() || 
+                      isSubmittingUpload ||
+                      selectedConverters.length === 0 ||
+                      selectedChunkers.length === 0 ||
+                      selectedEmbedders.length === 0
+                    }
+                    className="bg-[#1a7f64] hover:bg-[#18735a]"
+                  >
+                    {isSubmittingUpload ? "Processing..." : "Start Processing"}
+                  </Button>
                 </div>
               </div>
-              
-              {/* Action Buttons */}
-              <div className="flex gap-3 justify-end pt-4 border-t border-[#3a3a3a]">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowUploadModal(false)}
-                  className="text-zinc-400 hover:text-white"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleUploadSubmit}
-                  disabled={
-                    !googleDriveLink.trim() || 
-                    isSubmittingUpload ||
-                    selectedConverters.length === 0 ||
-                    selectedChunkers.length === 0 ||
-                    selectedEmbedders.length === 0
-                  }
-                  className="bg-[#1a7f64] hover:bg-[#18735a]"
-                >
-                  {isSubmittingUpload ? "Processing..." : "Start Processing"}
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -477,26 +811,65 @@ export default function ChatInterface() {
               onChange={(e) => setOpenRouterModel(e.target.value)}
               className="bg-[#2a2a2a] text-zinc-300 border-none rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1a7f64] focus:border-[#1a7f64]"
             >
-              <option value="openai/gpt-4.1">gpt-4.1</option>
-              <option value="anthropic/claude-3.7-sonnet">claude-3.7-sonnet</option>
-              <option value="google/gemini-2.5-pro-preview">gemini-2.5-pro-preview</option>
-              <option value="x-ai/grok-3-beta">grok-3-beta</option>
-              <option value="deepseek/deepseek-r1-0528">deepseek-r1-0528</option>
-              <option value="meta-llama/llama-4-maverick">llama-4-maverick</option>
+              <option value="openai/gpt-4o-mini">gpt-4o-mini</option>
+              <option value="openai/gpt-4o">gpt-4o</option>
+              <option value="anthropic/claude-3.5-sonnet">claude-3.5-sonnet</option>
+              <option value="google/gemini-pro-1.5">gemini-pro-1.5</option>
+              <option value="meta-llama/llama-3.1-70b-instruct">llama-3.1-70b</option>
+              <option value="mistralai/mistral-7b-instruct">mistral-7b</option>
             </select>
           </div>
 
           <div className="ml-auto flex items-center space-x-2">
-            {/* Upload Papers Button - simplified, no progress tracking */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowUploadModal(true)}
-              className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 group mr-2"
-            >
-              <Upload className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:-translate-y-0.5" />
-              Upload Papers
-            </Button>
+            {/* Upload Papers Button or Status Bar */}
+            {uploadStatus.isTracking ? (
+              /* Status Bar */
+              <div className="flex items-center gap-2 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg px-3 py-2 min-w-[200px]">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-zinc-300 font-medium">Processing Papers</span>
+                    <span className="text-xs text-zinc-400">
+                      {uploadStatus.completedJobs}/{uploadStatus.totalJobs}
+                    </span>
+                  </div>
+                  <div className="w-full bg-[#1a1a1a] rounded-full h-2">
+                    <div 
+                      className="bg-[#1a7f64] h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(uploadStatus.percentage, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    {uploadStatus.percentage.toFixed(1)}% complete
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void checkUploadStatus()}
+                  disabled={isRefreshingStatus}
+                  className="h-8 w-8 text-zinc-400 hover:text-white flex-shrink-0"
+                  title="Refresh status"
+                >
+                  <div className={cn("h-4 w-4", isRefreshingStatus && "animate-spin")}>
+                    🔄
+                  </div>
+                </Button>
+              </div>
+            ) : (
+              /* Upload Papers Button */
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  resetUploadModal();
+                  setShowUploadModal(true);
+                }}
+                className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 group mr-2"
+              >
+                <Upload className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:-translate-y-0.5" />
+                Upload Papers
+              </Button>
+            )}
 
             {/* Response Mode Toggle */}
             <div className="flex items-center gap-2 mr-4">

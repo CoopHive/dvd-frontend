@@ -72,7 +72,7 @@ export const useChat = () => {
   const [scoredOptions, setScoredOptions] = useState<Map<string, number>>(new Map());
   const [rankedOptions, setRankedOptions] = useState<string[]>([]);
   
-  // New state for collection information
+  // Expose collection information
   const [collectionInfo, setCollectionInfo] = useState<{
     totalCollections: number;
     collectionNames: string[];
@@ -83,6 +83,50 @@ export const useChat = () => {
   const [openRouterModel, setOpenRouterModel] = useState<string>(
     OPENROUTER_CONFIG.defaultModel
   );
+
+  // Debug logging for model changes
+  useEffect(() => {
+    console.log(`OpenRouter model changed to: ${openRouterModel}`);
+  }, [openRouterModel]);
+
+  // Upload status tracking - persist in localStorage
+  const [uploadStatus, setUploadStatus] = useState<{
+    isTracking: boolean;
+    totalJobs: number;
+    completedJobs: number;
+    percentage: number;
+  }>(() => {
+    // Initialize from localStorage if available
+    if (typeof window !== "undefined" && userId) {
+      const stored = localStorage.getItem(`uploadStatus_${userId}`);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as {
+            isTracking: boolean;
+            totalJobs: number;
+            completedJobs: number;
+            percentage: number;
+          };
+          return parsed;
+        } catch (e) {
+          console.error("Error parsing stored upload status:", e);
+        }
+      }
+    }
+    return {
+      isTracking: false,
+      totalJobs: 0,
+      completedJobs: 0,
+      percentage: 0,
+    };
+  });
+
+  // Save upload status to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== "undefined" && userId) {
+      localStorage.setItem(`uploadStatus_${userId}`, JSON.stringify(uploadStatus));
+    }
+  }, [uploadStatus, userId]);
 
   // Track if initial load has happened
   const initialLoadComplete = useRef(false);
@@ -315,6 +359,7 @@ export const useChat = () => {
 
     try {
       console.log("Creating enhanced query with context...");
+      console.log(`Using OpenRouter model: ${openRouterModel}`);
       
       const response = await fetch(OPENROUTER_CONFIG.url, {
         method: "POST",
@@ -397,6 +442,7 @@ Provide a thoughtful, well-structured response that addresses the user's questio
 
     try {
       console.log("Generating contextual GPT response...");
+      console.log(`Using OpenRouter model: ${openRouterModel}`);
       
       const response = await fetch(OPENROUTER_CONFIG.url, {
         method: "POST",
@@ -451,7 +497,7 @@ Provide a thoughtful, well-structured response that addresses the user's questio
       const payload = {
         query: enhancedQuery, // Use enhanced query for database search
         db_path: null,
-        model_name: API_CONFIG.model,
+        model_name: openRouterModel, // Use selected model instead of API_CONFIG.model
         user_email: session?.user?.email, // Include user email for additional context
       };
 
@@ -668,7 +714,7 @@ Provide a thoughtful, well-structured response that addresses the user's questio
         ];
       }
     },
-    [processWithOpenRouter, activeChat, session, generateContextualGPTResponse, createEnhancedQuery]
+    [processWithOpenRouter, activeChat, session, generateContextualGPTResponse, createEnhancedQuery, openRouterModel]
   );
 
   // Rank response options
@@ -921,6 +967,20 @@ Provide a thoughtful, well-structured response that addresses the user's questio
   // Check if user is authenticated
   const isAuthenticated = !!session && !!userId;
 
+  // Function to clear upload status (for when upload is truly completed)
+  const clearUploadStatus = useCallback(() => {
+    const clearedStatus = {
+      isTracking: false,
+      totalJobs: 0,
+      completedJobs: 0,
+      percentage: 0,
+    };
+    setUploadStatus(clearedStatus);
+    if (typeof window !== "undefined" && userId) {
+      localStorage.removeItem(`uploadStatus_${userId}`);
+    }
+  }, [userId]);
+
   return {
     chats,
     activeChat,
@@ -950,5 +1010,10 @@ Provide a thoughtful, well-structured response that addresses the user's questio
 
     // Expose collection information
     collectionInfo,
+
+    // Expose upload status and functions
+    uploadStatus,
+    setUploadStatus,
+    clearUploadStatus,
   };
 };
