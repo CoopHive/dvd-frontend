@@ -13,6 +13,7 @@ import {
   deleteChat,
 } from "~/lib/chat-storage";
 import { API_CONFIG, OPENROUTER_CONFIG } from "~/config/api";
+import { getCustomPrompts, interpolatePrompt } from "~/config/prompts";
 
 export type ResponseOption = {
   id: string;
@@ -83,11 +84,6 @@ export const useChat = () => {
   const [openRouterModel, setOpenRouterModel] = useState<string>(
     OPENROUTER_CONFIG.defaultModel
   );
-
-  // Debug logging for model changes
-  useEffect(() => {
-    console.log(`OpenRouter model changed to: ${openRouterModel}`);
-  }, [openRouterModel]);
 
   // Upload status tracking - persist in localStorage
   const [uploadStatus, setUploadStatus] = useState<{
@@ -221,42 +217,20 @@ export const useChat = () => {
     // Combine the content into a context string
     const context = contents.join("\n\n");
 
+    // Get custom prompts and interpolate the research assistant prompt
+    const customPrompts = getCustomPrompts(userId);
+    const systemPrompt = interpolatePrompt(customPrompts.researchAssistant, {
+      collectionName,
+      context
+    });
+
     // Prepare the message for OpenRouter
     const openRouterPayload = {
       model: openRouterModel, // <-- use the selected model from state
       messages: [
         {
           role: "system",
-          content: `You are an expert research assistant analyzing scientific documents. Your task is to provide accurate, well-structured answers based EXCLUSIVELY on the information provided from collection "${collectionName}".
-
-          **CRITICAL GUIDELINES:**
-          • Base your response ONLY on the provided context - never use external knowledge
-          • If the context doesn't contain sufficient information to answer the question, explicitly state this
-          • Clearly distinguish between direct facts from the documents and any logical inferences
-          • Preserve the scientific accuracy and terminology from the source material
-
-          **RESPONSE FORMATTING:**
-          • Use **bold** for key findings, important terms, and main conclusions
-          • Use bullet points (•) for lists, multiple findings, or step-by-step information
-          • Use numbered lists (1., 2., 3.) when describing processes, methodologies, or ranked information
-          • Use > blockquotes for direct citations or important quotes from the papers
-          • Organize information hierarchically with clear sections when appropriate
-
-          **CONTENT STRUCTURE:**
-          1. Lead with the most relevant and direct answer to the question
-          2. Support with specific evidence, data, or findings from the documents
-          3. Include relevant context that helps understand the main answer
-          4. Note any limitations or gaps in the available information
-
-          **HANDLING UNCERTAINTY:**
-          • If information is incomplete: "Based on the available documents, [partial answer], however more information would be needed to fully address [specific aspect]"
-          • If no relevant information exists: "The provided documents from collection ${collectionName} do not contain information about [specific topic]"
-          • If information conflicts: Present both perspectives clearly and note the discrepancy
-
-          Context from collection "${collectionName}":
-          ${context}
-
-          Provide a comprehensive, accurate response that maximizes the value of the available information while maintaining scientific rigor.`,
+          content: systemPrompt,
         },
         {
           role: "user",
@@ -298,7 +272,7 @@ export const useChat = () => {
     }
 
     return "No response received from OpenRouter.";
-  }, [openRouterModel]);
+  }, [openRouterModel, userId]);
 
   // Create enhanced query using chat context
   const createEnhancedQuery = useCallback(async (
@@ -404,7 +378,7 @@ export const useChat = () => {
     }
 
     // Build conversation context from recent messages (last 15 messages max)
-    const recentMessages = chatMessages.slice(-15);
+    const recentMessages = chatMessages.slice(-5);
     
     // Create messages array for the conversation
     const messages = [];

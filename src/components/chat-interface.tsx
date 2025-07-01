@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -18,6 +18,7 @@ import {
   Trophy,
   Upload,
   X,
+  Settings,
 } from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
@@ -26,6 +27,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
 import { API_CONFIG } from "~/config/api";
+import { PromptSettingsDialog } from "./prompt-settings-dialog";
 
 export default function ChatInterface() {
   const {
@@ -86,6 +88,16 @@ export default function ChatInterface() {
   const availableConverters = ["marker", "openai", "markitdown"];
   const availableChunkers = ["fixed_length", "recursive", "markdown_aware", "semantic_split"];
   const availableEmbedders = ["openai", "bge"];
+
+  // Prompt settings state
+  const [showPromptSettings, setShowPromptSettings] = useState(false);
+  const [promptsVersion, setPromptsVersion] = useState(0);
+
+  // Handle prompt changes
+  const handlePromptsChanged = useCallback(() => {
+    // Force re-render by updating version
+    setPromptsVersion(prev => prev + 1);
+  }, []);
 
   // Check upload status function
   const checkUploadStatus = useCallback(async () => {
@@ -820,6 +832,19 @@ export default function ChatInterface() {
             </select>
           </div>
 
+          {/* Prompt Settings Button */}
+          <div className="ml-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowPromptSettings(true)}
+              className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-[#2a2a2a] transition-all duration-200 hover:scale-110"
+              title="Customize prompts"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
+
           <div className="ml-auto flex items-center space-x-2">
             {/* Upload Papers Button or Status Bar */}
             {uploadStatus.isTracking ? (
@@ -842,18 +867,29 @@ export default function ChatInterface() {
                     {uploadStatus.percentage.toFixed(1)}% complete
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => void checkUploadStatus()}
-                  disabled={isRefreshingStatus}
-                  className="h-8 w-8 text-zinc-400 hover:text-white flex-shrink-0"
-                  title="Refresh status"
-                >
-                  <div className={cn("h-4 w-4", isRefreshingStatus && "animate-spin")}>
-                    🔄
-                  </div>
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void checkUploadStatus()}
+                    disabled={isRefreshingStatus}
+                    className="h-8 w-8 text-zinc-400 hover:text-white flex-shrink-0"
+                    title="Refresh status"
+                  >
+                    <div className={cn("h-4 w-4", isRefreshingStatus && "animate-spin")}>
+                      🔄
+                    </div>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearUploadStatus}
+                    className="h-8 w-8 text-zinc-400 hover:text-red-400 flex-shrink-0"
+                    title="Dismiss upload status"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ) : (
               /* Upload Papers Button */
@@ -1373,6 +1409,13 @@ export default function ChatInterface() {
           </div>
         </div>
       </div>
+
+      {/* Prompt Settings Dialog */}
+      <PromptSettingsDialog
+        open={showPromptSettings}
+        onOpenChange={setShowPromptSettings}
+        onPromptsChanged={handlePromptsChanged}
+      />
     </div>
   );
 }
