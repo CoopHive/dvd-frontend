@@ -99,6 +99,7 @@ export default function ChatInterface() {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",  // Skip ngrok browser warning for free tunnels
         },
         mode: "cors",
       });
@@ -150,10 +151,10 @@ export default function ChatInterface() {
       // Check status immediately if we have a tracking session
       void checkUploadStatus();
       
-      // Set up interval to check status every 3 seconds
+      // Set up interval to check status every 10 seconds
       const interval = setInterval(() => {
         void checkUploadStatus();
-      }, 3000);
+      }, 10000);
       
       return () => clearInterval(interval);
     }
@@ -178,6 +179,7 @@ export default function ChatInterface() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",  // Skip ngrok browser warning for free tunnels
         },
         mode: "cors",
         body: JSON.stringify({
@@ -273,6 +275,7 @@ export default function ChatInterface() {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
+          "ngrok-skip-browser-warning": "true",  // Skip ngrok browser warning for free tunnels
         },
         mode: "cors",
         body: JSON.stringify({
