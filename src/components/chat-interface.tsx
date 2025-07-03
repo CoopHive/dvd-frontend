@@ -73,7 +73,7 @@ export default function ChatInterface() {
   // Processing options state
   const [selectedConverters, setSelectedConverters] = useState<string[]>(["markitdown"]);
   const [selectedChunkers, setSelectedChunkers] = useState<string[]>(["recursive"]);
-  const [selectedEmbedders, setSelectedEmbedders] = useState<string[]>(["bge-large"]);
+  const [selectedEmbedders, setSelectedEmbedders] = useState<string[]>(["bge"]);
 
   // Upload modal step management
   const [uploadStep, setUploadStep] = useState<1 | 2>(1);
@@ -85,7 +85,7 @@ export default function ChatInterface() {
   // Available options
   const availableConverters = ["marker", "openai", "markitdown"];
   const availableChunkers = ["fixed_length", "recursive", "markdown_aware", "semantic_split"];
-  const availableEmbedders = ["openai", "bge-large", "nomic-embed-text", "instructor-xl"];
+  const availableEmbedders = ["openai", "bge", "nomic", "instructor"];
 
   // Check upload status function
   const checkUploadStatus = useCallback(async () => {
@@ -251,7 +251,7 @@ export default function ChatInterface() {
     setGoogleDriveLink("");
     setSelectedConverters(["markitdown"]);
     setSelectedChunkers(["recursive"]);
-    setSelectedEmbedders(["bge-large"]);
+    setSelectedEmbedders(["bges"]);
   };
 
   const handleUploadSubmit = async () => {

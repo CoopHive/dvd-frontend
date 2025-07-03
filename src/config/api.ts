@@ -2,7 +2,7 @@
 export const API_CONFIG = {
   // Light server - quick operations (evaluation, status)
   light: {
-    url: process.env.NEXT_PUBLIC_LIGHT_SERVER_URL || "http://localhost:5001",
+    url: process.env.NEXT_PUBLIC_LIGHT_SERVER_URL ?? "http://localhost:5001",
     endpoints: {
       evaluate: "/api/evaluate",
       status: "/api/status", 
@@ -13,7 +13,7 @@ export const API_CONFIG = {
   },
   // Heavy server - resource-intensive operations (ingestion, processing)
   heavy: {
-    url: process.env.NEXT_PUBLIC_HEAVY_SERVER_URL || "http://localhost:5002",
+    url: process.env.NEXT_PUBLIC_HEAVY_SERVER_URL ?? "http://localhost:5002",
     endpoints: {
       ingest: "/api/ingest/gdrive",
       embed: "/api/embed",
