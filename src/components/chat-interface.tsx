@@ -85,7 +85,7 @@ export default function ChatInterface() {
   // Available options
   const availableConverters = ["marker", "openai", "markitdown"];
   const availableChunkers = ["fixed_length", "recursive", "markdown_aware", "semantic_split"];
-  const availableEmbedders = ["openai", "bge", "nomic", "instructor"];
+  const availableEmbedders = ["openai", "bge"];
 
   // Check upload status function
   const checkUploadStatus = useCallback(async () => {
