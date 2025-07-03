@@ -251,7 +251,7 @@ export default function ChatInterface() {
     setGoogleDriveLink("");
     setSelectedConverters(["markitdown"]);
     setSelectedChunkers(["recursive"]);
-    setSelectedEmbedders(["bges"]);
+    setSelectedEmbedders(["bge"]);
   };
 
   const handleUploadSubmit = async () => {
