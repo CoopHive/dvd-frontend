@@ -85,7 +85,7 @@ export default function ChatInterface() {
   // Available options
   const availableConverters = ["marker", "openai", "markitdown"];
   const availableChunkers = ["fixed_length", "recursive", "markdown_aware", "semantic_split"];
-  const availableEmbedders = ["openai", "bge"];
+  const availableEmbedders = ["openai", "bge", "bgelarge"];
 
   // Check upload status function
   const checkUploadStatus = useCallback(async () => {
@@ -814,12 +814,66 @@ export default function ChatInterface() {
               onChange={(e) => setOpenRouterModel(e.target.value)}
               className="bg-[#2a2a2a] text-zinc-300 border-none rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1a7f64] focus:border-[#1a7f64]"
             >
-              <option value="openai/gpt-4o-mini">gpt-4o-mini</option>
-              <option value="openai/gpt-4o">gpt-4o</option>
-              <option value="anthropic/claude-3.5-sonnet">claude-3.5-sonnet</option>
-              <option value="google/gemini-pro-1.5">gemini-pro-1.5</option>
-              <option value="meta-llama/llama-3.1-70b-instruct">llama-3.1-70b</option>
-              <option value="mistralai/mistral-7b-instruct">mistral-7b</option>
+              {/* OpenAI Models */}
+              <optgroup label="OpenAI">
+                <option value="openai/gpt-4.1-nano">GPT-4.1 Nano</option>
+                <option value="openai/gpt-4.1">GPT-4.1</option>
+                <option value="openai/o1-pro">o1-pro</option>
+                <option value="openai/o1-mini">o1-mini</option>
+              </optgroup>
+              
+              {/* Anthropic Claude Models */}
+              <optgroup label="Anthropic">
+                <option value="anthropic/claude-opus-4">Claude Opus 4</option>
+                <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
+                <option value="anthropic/claude-3.7-sonnet">Claude 3.7 Sonnet</option>
+                <option value="anthropic/claude-3.7-sonnet:thinking">Claude 3.7 Sonnet (Thinking)</option>
+                <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
+              </optgroup>
+              
+              {/* Google Models */}
+              <optgroup label="Google">
+                <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+                <option value="google/gemma-3-4b-it">Gemma 3 4B IT</option>
+              </optgroup>
+              
+              {/* DeepSeek Models */}
+              <optgroup label="DeepSeek">
+                <option value="deepseek/deepseek-r1">DeepSeek R1</option>
+                <option value="deepseek/deepseek-r1-0528">DeepSeek R1 0528</option>
+                <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3 0324</option>
+              </optgroup>
+              
+              {/* Meta Llama Models */}
+              <optgroup label="Meta Llama">
+                <option value="meta-llama/llama-4-maverick">Llama 4 Maverick</option>
+                <option value="meta-llama/llama-4-scout">Llama 4 Scout</option>
+                <option value="meta-llama/llama-3.2-3b-instruct">Llama 3.2 3B</option>
+              </optgroup>
+              
+              {/* Mistral Models */}
+              <optgroup label="Mistral">
+                <option value="mistralai/mistral-saba">Mixtral Saba</option>
+                <option value="mistralai/mistral-medium-3">Mistral Medium 3</option>
+                <option value="mistralai/magistral-medium-2506">Magistral Medium 2506</option>
+                <option value="mistralai/mistral-small-3.2-24b-instruct">Mistral Small 3.2 24B</option>
+              </optgroup>
+              
+              {/* Qwen Models */}
+              <optgroup label="Qwen">
+                <option value="qwen/qwen3-32b">Qwen3 32B</option>
+                <option value="qwen/qwen3-30b-a3b">Qwen3 30B A3B</option>
+                <option value="qwen/qwen3-8b">Qwen3 8B</option>
+              </optgroup>
+              
+              {/* Other Models */}
+              <optgroup label="Others">
+                <option value="x-ai/grok-3">Grok 3</option>
+                <option value="cohere/command-r7b-12-2024">Command R7B 12 2024</option>
+                <option value="cohere/command-r-plus">Command R Plus</option>
+                <option value="amazon/nova-pro-v1">Nova Pro V1</option>
+              </optgroup>
             </select>
           </div>
 
