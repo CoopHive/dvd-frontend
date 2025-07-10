@@ -14,6 +14,38 @@ import {
 } from "~/lib/chat-storage";
 import { API_CONFIG, OPENROUTER_CONFIG } from "~/config/api";
 
+// Default OpenRouter prompt template
+export const DEFAULT_OPENROUTER_PROMPT = `You are an expert research assistant analyzing scientific documents. Your task is to provide accurate, well-structured answers based EXCLUSIVELY on the information provided from collection "{collectionName}".
+
+**CRITICAL GUIDELINES:**
+• Base your response ONLY on the provided context - never use external knowledge
+• If the context doesn't contain sufficient information to answer the question, explicitly state this
+• Clearly distinguish between direct facts from the documents and any logical inferences
+• Preserve the scientific accuracy and terminology from the source material
+
+**RESPONSE FORMATTING:**
+• Use **bold** for key findings, important terms, and main conclusions
+• Use bullet points (•) for lists, multiple findings, or step-by-step information
+• Use numbered lists (1., 2., 3.) when describing processes, methodologies, or ranked information
+• Use > blockquotes for direct citations or important quotes from the papers
+• Organize information hierarchically with clear sections when appropriate
+
+**CONTENT STRUCTURE:**
+1. Lead with the most relevant and direct answer to the question
+2. Support with specific evidence, data, or findings from the documents
+3. Include relevant context that helps understand the main answer
+4. Note any limitations or gaps in the available information
+
+**HANDLING UNCERTAINTY:**
+• If information is incomplete: "Based on the available documents, [partial answer], however more information would be needed to fully address [specific aspect]"
+• If no relevant information exists: "The provided documents from collection {collectionName} do not contain information about [specific topic]"
+• If information conflicts: Present both perspectives clearly and note the discrepancy
+
+Context from collection "{collectionName}":
+{context}
+
+Provide a comprehensive, accurate response that maximizes the value of the available information while maintaining scientific rigor.`;
+
 export type ResponseOption = {
   id: string;
   content: string;
@@ -83,6 +115,29 @@ export const useChat = () => {
   const [openRouterModel, setOpenRouterModel] = useState<string>(
     OPENROUTER_CONFIG.defaultModel
   );
+
+  // Custom OpenRouter prompt - persist in localStorage
+  const [customOpenRouterPrompt, setCustomOpenRouterPrompt] = useState<string>(() => {
+    if (typeof window !== "undefined" && userId) {
+      const stored = localStorage.getItem(`customOpenRouterPrompt_${userId}`);
+      if (stored) {
+        try {
+          return JSON.parse(stored) as string;
+        } catch (e) {
+          console.error("Error parsing stored custom prompt:", e);
+          return DEFAULT_OPENROUTER_PROMPT;
+        }
+      }
+    }
+    return DEFAULT_OPENROUTER_PROMPT;
+  });
+
+  // Save custom prompt to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== "undefined" && userId) {
+      localStorage.setItem(`customOpenRouterPrompt_${userId}`, JSON.stringify(customOpenRouterPrompt));
+    }
+  }, [customOpenRouterPrompt, userId]);
 
   // Debug logging for model changes
   useEffect(() => {
@@ -227,36 +282,9 @@ export const useChat = () => {
       messages: [
         {
           role: "system",
-          content: `You are an expert research assistant analyzing scientific documents. Your task is to provide accurate, well-structured answers based EXCLUSIVELY on the information provided from collection "${collectionName}".
-
-          **CRITICAL GUIDELINES:**
-          • Base your response ONLY on the provided context - never use external knowledge
-          • If the context doesn't contain sufficient information to answer the question, explicitly state this
-          • Clearly distinguish between direct facts from the documents and any logical inferences
-          • Preserve the scientific accuracy and terminology from the source material
-
-          **RESPONSE FORMATTING:**
-          • Use **bold** for key findings, important terms, and main conclusions
-          • Use bullet points (•) for lists, multiple findings, or step-by-step information
-          • Use numbered lists (1., 2., 3.) when describing processes, methodologies, or ranked information
-          • Use > blockquotes for direct citations or important quotes from the papers
-          • Organize information hierarchically with clear sections when appropriate
-
-          **CONTENT STRUCTURE:**
-          1. Lead with the most relevant and direct answer to the question
-          2. Support with specific evidence, data, or findings from the documents
-          3. Include relevant context that helps understand the main answer
-          4. Note any limitations or gaps in the available information
-
-          **HANDLING UNCERTAINTY:**
-          • If information is incomplete: "Based on the available documents, [partial answer], however more information would be needed to fully address [specific aspect]"
-          • If no relevant information exists: "The provided documents from collection ${collectionName} do not contain information about [specific topic]"
-          • If information conflicts: Present both perspectives clearly and note the discrepancy
-
-          Context from collection "${collectionName}":
-          ${context}
-
-          Provide a comprehensive, accurate response that maximizes the value of the available information while maintaining scientific rigor.`,
+          content: customOpenRouterPrompt
+            .replace(/\{collectionName\}/g, collectionName)
+            .replace(/\{context\}/g, context),
         },
         {
           role: "user",
@@ -298,7 +326,7 @@ export const useChat = () => {
     }
 
     return "No response received from OpenRouter.";
-  }, [openRouterModel]);
+  }, [openRouterModel, customOpenRouterPrompt]);
 
   // Create enhanced query using chat context
   const createEnhancedQuery = useCallback(async (
@@ -1015,5 +1043,9 @@ Provide a thoughtful, well-structured response that addresses the user's questio
     uploadStatus,
     setUploadStatus,
     clearUploadStatus,
+
+    // Expose custom prompt state and setter
+    customOpenRouterPrompt,
+    setCustomOpenRouterPrompt,
   };
 };

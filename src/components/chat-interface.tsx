@@ -18,6 +18,7 @@ import {
   Trophy,
   Upload,
   X,
+  Settings,
 } from "lucide-react";
 import { useChat } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
@@ -26,6 +27,15 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
 import { API_CONFIG } from "~/config/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "~/components/ui/dialog";
 
 export default function ChatInterface() {
   const {
@@ -55,6 +65,9 @@ export default function ChatInterface() {
     uploadStatus,
     setUploadStatus,
     clearUploadStatus,
+    // Pull in custom prompt state:
+    customOpenRouterPrompt,
+    setCustomOpenRouterPrompt,
   } = useChat();
 
   const { data: session } = useSession();
@@ -63,6 +76,8 @@ export default function ChatInterface() {
   const [googleDriveLink, setGoogleDriveLink] = useState("");
   const [isSubmittingUpload, setIsSubmittingUpload] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
+  const [showPromptDialog, setShowPromptDialog] = useState(false);
+  const [tempPrompt, setTempPrompt] = useState(customOpenRouterPrompt);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -807,7 +822,7 @@ export default function ChatInterface() {
             {activeChat?.title ?? "New Chat"}
           </h1>
 
-          <div className="ml-4">
+          <div className="ml-4 flex items-center gap-2">
             {/* Dropdown for selecting OpenRouter model */}
             <select
               value={openRouterModel}
@@ -875,6 +890,58 @@ export default function ChatInterface() {
                 <option value="amazon/nova-pro-v1">Nova Pro V1</option>
               </optgroup>
             </select>
+
+            {/* Button to open prompt editor */}
+            <Dialog open={showPromptDialog} onOpenChange={setShowPromptDialog}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 bg-[#2a2a2a] border-none hover:bg-[#3a3a3a]"
+                  title="Edit OpenRouter Prompt"
+                  onClick={() => setTempPrompt(customOpenRouterPrompt)}
+                >
+                  <Settings className="h-4 w-4 text-zinc-300" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-[#1a1a1a] border-zinc-800 text-zinc-300 max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-white">Edit OpenRouter Prompt</DialogTitle>
+                  <DialogDescription className="text-zinc-400">
+                    Customize the system prompt used when querying OpenRouter. Use {"{collectionName}"} and {"{context}"} as placeholders.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="mt-4">
+                  <textarea
+                    value={tempPrompt}
+                    onChange={(e) => setTempPrompt(e.target.value)}
+                    className="w-full h-96 p-3 bg-[#2a2a2a] text-zinc-300 border border-zinc-700 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a7f64] font-mono text-sm resize-none"
+                    placeholder="Enter your custom prompt..."
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setTempPrompt(customOpenRouterPrompt);
+                      setShowPromptDialog(false);
+                    }}
+                    className="bg-[#2a2a2a] border-zinc-700 text-zinc-300 hover:bg-[#3a3a3a]"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setCustomOpenRouterPrompt(tempPrompt);
+                      setShowPromptDialog(false);
+                    }}
+                    className="bg-[#1a7f64] text-white hover:bg-[#2a8f74]"
+                  >
+                    Save Prompt
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <div className="ml-auto flex items-center space-x-2">
