@@ -6,9 +6,9 @@ import { ThemeProvider } from "~/components/theme-provider";
 import { SessionProvider } from "~/components/session-provider";
 
 export const metadata: Metadata = {
-  title: "Apiary",
-  description: "A ChatGPT-style interface built with Next.js and Tailwind",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
+  title: "Decentralized Research Assistant",
+  description: "A decentralized research assistant built with Next.js and Tailwind",
+  icons: [{ rel: "icon", url: "/icon.jpeg" }],
 };
 
 const geist = Geist({
