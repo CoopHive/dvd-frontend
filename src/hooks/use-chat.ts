@@ -745,6 +745,77 @@ Provide a thoughtful, well-structured response that addresses the user's questio
     [processWithOpenRouter, activeChat, session, generateContextualGPTResponse, createEnhancedQuery, openRouterModel]
   );
 
+  // Store evaluation data to backend
+  const storeEvaluationData = useCallback(
+    async (
+      mode: ResponseMode,
+      selectedOptionId: string,
+      options: ResponseOption[],
+      query: string,
+      scores?: Map<string, number> // Add scores parameter
+    ) => {
+      if (!session?.user?.email || !chatId) return;
+
+      try {
+        // Prepare options with mode-specific data
+        const formattedOptions = options.map((option) => {
+          const baseOption = {
+            id: option.id,
+            content: option.content,
+            collection_name: option.content.split(":")[0] ?? undefined,
+          };
+
+          if (mode === "scoring") {
+            return {
+              ...baseOption,
+              score: scores ? scores.get(option.id) ?? 0 : scoredOptions.get(option.id) ?? 0,
+            };
+          } else if (mode === "ranking") {
+            const rankIndex = rankedOptions.indexOf(option.id);
+            return {
+              ...baseOption,
+              rank: rankIndex >= 0 ? rankIndex + 1 : options.length,
+            };
+          }
+
+          return baseOption;
+        });
+
+        // Send to backend
+        const response = await fetch(`${API_CONFIG.light.url}/api/evaluation/store`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            user_email: session.user.email,
+            query,
+            mode,
+            options: formattedOptions,
+            selected_option_id: selectedOptionId,
+            chat_id: chatId,
+            timestamp: Date.now() / 1000,
+            metadata: {
+              model: openRouterModel,
+              total_collections: collectionInfo?.totalCollections ?? 0,
+              collection_names: collectionInfo?.collectionNames ?? [],
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          console.error("Failed to store evaluation data:", await response.text());
+        } else {
+          const result = await response.json() as { success: boolean; evaluation_id: string; message: string };
+          console.log("Evaluation stored:", result);
+        }
+      } catch (error) {
+        console.error("Error storing evaluation data:", error);
+      }
+    },
+    [session, chatId, scoredOptions, rankedOptions, openRouterModel, collectionInfo]
+  );
+
   // Rank response options
   const moveResponseUp = useCallback((optionId: string) => {
     setRankedOptions((prev) => {
@@ -801,12 +872,19 @@ Provide a thoughtful, well-structured response that addresses the user's questio
       );
       setChats(chatArray);
 
+      // Store evaluation data before clearing
+      const currentQuery = activeChat?.messages
+        .filter(msg => msg.role === 'user')
+        .pop()?.content ?? "";
+      
+      void storeEvaluationData('ranking', topRankedId!, responseOptions, currentQuery);
+
       setShowResponseOptions(false);
       setResponseOptions([]);
       setRankedOptions([]);
       setCollectionInfo(null); // Clear collection info
     }
-  }, [rankedOptions, responseOptions, chatId, userId]);
+  }, [rankedOptions, responseOptions, chatId, userId, activeChat, storeEvaluationData]);
 
   // Initialize ranking when switching to ranking mode
   const initializeRanking = useCallback(() => {
@@ -874,6 +952,15 @@ Provide a thoughtful, well-structured response that addresses the user's questio
           );
           setChats(chatArray);
 
+          // Store evaluation data before clearing
+          const currentQuery = activeChat?.messages
+            .filter(msg => msg.role === 'user')
+            .pop()?.content ?? "";
+          
+          if (selectedOption) {
+            void storeEvaluationData('scoring', selectedOption.id, responseOptions, currentQuery, scores);
+          }
+
           setShowResponseOptions(false);
           setResponseOptions([]);
           setScoredOptions(new Map());
@@ -881,7 +968,7 @@ Provide a thoughtful, well-structured response that addresses the user's questio
         }
       }
     },
-    [responseOptions, scoredOptions, responseMode, chatId, userId]
+    [responseOptions, scoredOptions, responseMode, chatId, userId, activeChat, storeEvaluationData]
   );
 
   // Select a response option (manual mode)
@@ -908,11 +995,18 @@ Provide a thoughtful, well-structured response that addresses the user's questio
       );
       setChats(chatArray);
 
+      // Store evaluation data before clearing
+      const currentQuery = activeChat?.messages
+        .filter(msg => msg.role === 'user')
+        .pop()?.content ?? "";
+      
+      void storeEvaluationData('manual', optionId, responseOptions, currentQuery);
+
       setShowResponseOptions(false);
       setResponseOptions([]);
       setCollectionInfo(null); // Clear collection info
     },
-    [chatId, userId, showResponseOptions, responseOptions, responseMode]
+    [chatId, userId, showResponseOptions, responseOptions, responseMode, activeChat, storeEvaluationData]
   );
 
   // Reset response options and scores when starting new interaction

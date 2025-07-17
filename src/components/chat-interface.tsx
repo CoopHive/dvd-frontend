@@ -20,7 +20,7 @@ import {
   X,
   Settings,
 } from "lucide-react";
-import { useChat } from "~/hooks/use-chat";
+import { useChat, DEFAULT_OPENROUTER_PROMPT } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "~/components/ui/avatar";
 import ReactMarkdown from "react-markdown";
@@ -931,6 +931,15 @@ export default function ChatInterface() {
                     Cancel
                   </Button>
                   <Button
+                    variant="outline"
+                    onClick={() => {
+                      setTempPrompt(DEFAULT_OPENROUTER_PROMPT);
+                    }}
+                    className="bg-[#2a2a2a] border-zinc-700 text-zinc-300 hover:bg-[#3a3a3a]"
+                  >
+                    Reset to Default
+                  </Button>
+                  <Button
                     onClick={() => {
                       setCustomOpenRouterPrompt(tempPrompt);
                       setShowPromptDialog(false);
@@ -1128,7 +1137,7 @@ export default function ChatInterface() {
                           remarkPlugins={[remarkGfm]}
                           components={{
                             strong: ({ node: _node, ...props }) => (
-                              <span className="font-bold text-[#4fd1c5]" {...props} />
+                              <span className="font-bold text-[#ffffff]" {...props} />
                             ),
                             h1: ({ node: _node, ...props }) => (
                               <h1 className="text-xl font-bold mt-4 mb-2" {...props} />
@@ -1250,7 +1259,7 @@ export default function ChatInterface() {
                                   remarkPlugins={[remarkGfm]}
                                   components={{
                                     strong: ({ node: _node, ...props }) => (
-                                      <span className="font-bold text-[#4fd1c5]" {...props} />
+                                      <span className="font-bold text-[#ffffff]" {...props} />
                                     ),
                                     h1: ({ node: _node, ...props }) => (
                                       <h1 className="text-xl font-bold mt-4 mb-2" {...props} />
@@ -1311,7 +1320,7 @@ export default function ChatInterface() {
                                   remarkPlugins={[remarkGfm]}
                                   components={{
                                     strong: ({ node: _node, ...props }) => (
-                                      <span className="font-bold text-[#4fd1c5]" {...props} />
+                                      <span className="font-bold text-[#ffffff]" {...props} />
                                     ),
                                     h1: ({ node: _node, ...props }) => (
                                       <h1 className="text-xl font-bold mt-4 mb-2" {...props} />
