@@ -19,6 +19,7 @@ import {
   Upload,
   X,
   Settings,
+  Info,
 } from "lucide-react";
 import { useChat, DEFAULT_OPENROUTER_PROMPT } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
@@ -78,6 +79,7 @@ export default function ChatInterface() {
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [showPromptDialog, setShowPromptDialog] = useState(false);
   const [tempPrompt, setTempPrompt] = useState(customOpenRouterPrompt);
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -408,9 +410,6 @@ export default function ChatInterface() {
       setSelectedItems([...selectedItems, item]);
     }
   };
-
-  // Debug: Log upload status on every render
-  console.log("Render: uploadStatus =", uploadStatus);
 
   return (
     <div className="flex h-screen bg-[#0f0f0f]">
@@ -1004,6 +1003,17 @@ export default function ChatInterface() {
               </Button>
             )}
 
+            {/* Instructions Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowInstructionsModal(true)}
+              className="text-xs bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 group mr-2"
+            >
+              <Info className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:rotate-12" />
+              Instructions
+            </Button>
+
             {/* Response Mode Toggle */}
             <div className="flex items-center gap-2 mr-4">
               <span
@@ -1506,6 +1516,131 @@ export default function ChatInterface() {
           </div>
         </div>
       </div>
+
+      {/* Instructions Modal */}
+      <Dialog open={showInstructionsModal} onOpenChange={setShowInstructionsModal}>
+        <DialogContent className="bg-[#1a1a1a] border-zinc-800 text-zinc-300 max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white text-xl font-bold">RAG System Instructions</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              How to use the Decentralized Research Assistant
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mt-6 space-y-8">
+            {/* Upload Papers Section */}
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">📄 Upload Papers to RAG:</h3>
+              <div className="space-y-4 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span>Click <strong>&quot;Upload Papers&quot;</strong> button in header</span>
+                </div>
+                
+                <div className="ml-4 space-y-3">
+                  <div>
+                    <strong>Step 1 (Optional):</strong> Enter research area to auto-scrape papers → downloads zip file
+                  </div>
+                  
+                  <div>
+                    <strong>Step 2:</strong> Paste public Google Drive folder link + configure processing pipeline:
+                    <div className="ml-4 mt-2 space-y-2">
+                      <div><strong>Converters:</strong> Extract text from PDFs (marker, openai, markitdown)</div>
+                      <div><strong>Chunkers:</strong> Split documents (fixed_length, recursive, markdown_aware, semantic_split)</div>
+                      <div><strong>Embedders:</strong> Create vector embeddings (openai, bge, bgelarge)</div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-[#2a2a2a] p-3 rounded-lg">
+                    <span><strong>📝 Note:</strong> Each combination (e.g. marker_recursive_bge) creates a separate RAG database, with the specified combination of techniques.</span>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span>Shows progress bar while processing → the pipeline adds all the papers to the different databases created in the previous step.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Chat & Responses Section */}
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">💬 Chat & Responses:</h3>
+              <div className="space-y-4 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span>Type messages → queries all RAG database(s) with the selected AI model</span>
+                </div>
+                
+                <div>
+                  <strong>Response Modes</strong> (toggle in header):
+                  <div className="ml-4 mt-2 space-y-2">
+                    <div><strong>Manual:</strong> Click to select preferred AI response (default)</div>
+                    <div><strong>Scoring:</strong> Rate each response 1-10, highest auto-selected</div>
+                    <div><strong>Ranking:</strong> Drag responses to rank, top choice selected</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Settings Section */}
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">⚙️ Settings:</h3>
+              <div className="space-y-4 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span><strong>Gear icon:</strong> Edit RAG system prompt with <code className="bg-[#2a2a2a] px-1 py-0.5 rounded">{"{collectionName}"}</code> and <code className="bg-[#2a2a2a] px-1 py-0.5 rounded">{"{context}"}</code> placeholders.</span>
+                </div>
+                
+                <div className="ml-4 space-y-1">
+                  <div><strong>Context</strong> refers to the knowledge fetched from the specific database.</div>
+                  <div><strong>CollectionName</strong> refers to the specific database.</div>
+                </div>
+                
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span><strong>Model dropdown:</strong> 20+ models across OpenAI, Anthropic, Google, Meta, etc to choose for the final RAG response.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Status Tracking Section */}
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">📊 Status Tracking:</h3>
+              <div className="space-y-4 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span>Status bar replaces upload button when processing papers</span>
+                </div>
+                
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span>Shows completion percentage and job progress</span>
+                </div>
+                
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span><strong>Total Work:</strong> Papers × Databases × 2</span>
+                </div>
+                
+                <div className="flex items-start gap-2">
+                  <span className="text-[#1a7f64] font-medium">•</span>
+                  <span>Auto-refreshes every 10 seconds</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter className="mt-8">
+            <Button
+              onClick={() => setShowInstructionsModal(false)}
+              className="bg-[#1a7f64] text-white hover:bg-[#2a8f74]"
+            >
+              Got it!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

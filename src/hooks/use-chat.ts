@@ -298,34 +298,49 @@ export const useChat = () => {
       openRouterPayload
     );
 
-    const response = await fetch(OPENROUTER_CONFIG.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENROUTER_CONFIG.apiKey}`,
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Chat UI Demo",
-      },
-      body: JSON.stringify(openRouterPayload),
-    });
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+    try {
+      const response = await fetch(OPENROUTER_CONFIG.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENROUTER_CONFIG.apiKey}`,
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "Chat UI Demo",
+        },
+        body: JSON.stringify(openRouterPayload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId); // Clear timeout on successful response
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+      }
+
+      const result = (await response.json()) as OpenRouterResponse;
+      console.log(
+        `OpenRouter response (collection: ${collectionName}):`,
+        result
+      );
+
+      // Extract the assistant's response
+      if (result.choices?.[0]?.message?.content) {
+        return result.choices[0].message.content;
+      }
+
+      return "No response received from OpenRouter.";
+    } catch (error) {
+      clearTimeout(timeoutId); // Clear timeout on error
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`OpenRouter API timeout for collection ${collectionName}`);
+      }
+      throw error;
     }
-
-    const result = (await response.json()) as OpenRouterResponse;
-    console.log(
-      `OpenRouter response (collection: ${collectionName}):`,
-      result
-    );
-
-    // Extract the assistant's response
-    if (result.choices?.[0]?.message?.content) {
-      return result.choices[0].message.content;
-    }
-
-    return "No response received from OpenRouter.";
   }, [openRouterModel, customOpenRouterPrompt]);
 
   // Create enhanced query using chat context
@@ -389,6 +404,10 @@ export const useChat = () => {
       console.log("Creating enhanced query with context...");
       console.log(`Using OpenRouter model: ${openRouterModel}`);
       
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout
+
       const response = await fetch(OPENROUTER_CONFIG.url, {
         method: "POST",
         headers: {
@@ -398,7 +417,10 @@ export const useChat = () => {
           "X-Title": "Chat UI Demo - Query Enhancement",
         },
         body: JSON.stringify(queryEnhancementPayload),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId); // Clear timeout on successful response
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -472,6 +494,10 @@ Provide a thoughtful, well-structured response that addresses the user's questio
       console.log("Generating contextual GPT response...");
       console.log(`Using OpenRouter model: ${openRouterModel}`);
       
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       const response = await fetch(OPENROUTER_CONFIG.url, {
         method: "POST",
         headers: {
@@ -481,7 +507,10 @@ Provide a thoughtful, well-structured response that addresses the user's questio
           "X-Title": "Chat UI Demo - Contextual Response",
         },
         body: JSON.stringify(gptPayload),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId); // Clear timeout on successful response
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -603,96 +632,91 @@ Provide a thoughtful, well-structured response that addresses the user's questio
         // Extract content fields from each collection
         const responseOptions: ResponseOption[] = [];
 
-        // First, add contextual GPT response
-        try {
-          const gptResponse = await generateContextualGPTResponse(query, chatMessages);
-          responseOptions.push({
-            id: uuidv4(),
-            content: `**GPT Response (Conversational Context):** ${gptResponse}`,
-          });
-        } catch (error) {
-          console.error("Error generating contextual GPT response:", error);
-          responseOptions.push({
-            id: uuidv4(),
-            content: `**GPT Response:** Failed to generate contextual response. ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          });
-        }
+        // Prepare all OpenRouter calls to run in parallel
+        const openRouterCalls: Promise<{ id: string; content: string }>[] = [];
 
-        if (data.collection_results) {
-          // Iterate through each collection
-          for (const [collectionName, collectionData] of Object.entries(
-            data.collection_results
-          )) {
-            // Skip collections with errors
-            if (
-              collectionData &&
-              "error" in collectionData &&
-              collectionData.error
-            ) {
-              // Add an error option for this collection
-              responseOptions.push({
+        // First, add contextual GPT response call
+        openRouterCalls.push(
+          generateContextualGPTResponse(query, chatMessages)
+            .then(gptResponse => ({
+              id: uuidv4(),
+              content: `**GPT Response (Conversational Context):** ${gptResponse}`,
+            }))
+            .catch(error => {
+              console.error("Error generating contextual GPT response:", error);
+              return {
                 id: uuidv4(),
-                content: `Collection ${collectionName}: Error - ${collectionData.error}`,
-              });
-              continue;
-            }
+                content: `**GPT Response:** Failed to generate contextual response. ${
+                  error instanceof Error ? error.message : "Unknown error"
+                }`,
+              };
+            })
+        );
 
-            // Get contents from results if they exist
-            if (
-              collectionData?.results &&
-              Array.isArray(collectionData.results)
-            ) {
-              const contents = collectionData.results
-                .map((result) => {
-                  // Extract content from metadata if it exists
-                  return result.metadata?.content ?? null;
-                })
-                .filter((content): content is string => content !== null); // Type guard
+        // Then add all collection processing calls
+        for (const [collectionName, collectionData] of Object.entries(data.collection_results ?? {})) {
+          if (collectionData && typeof collectionData === 'object' && 'results' in collectionData && collectionData.results) {
+            const contents = collectionData.results
+              .map((result) => {
+                // Extract content from metadata if it exists
+                return result.metadata?.content ?? null;
+              })
+              .filter((content): content is string => content !== null); // Type guard
 
-              // Process this collection with OpenRouter using the ORIGINAL user query
-              // (not the enhanced one, as the enhanced query was for database search)
-              if (contents.length > 0) {
-                try {
-                  const openRouterResponse = await processWithOpenRouter(
-                    query, // Use original query for final response generation
-                    contents,
-                    collectionName
-                  );
-                  responseOptions.push({
+            // Process this collection with OpenRouter using the ORIGINAL user query
+            // (not the enhanced one, as the enhanced query was for database search)
+            if (contents.length > 0) {
+              openRouterCalls.push(
+                processWithOpenRouter(query, contents, collectionName)
+                  .then(openRouterResponse => ({
                     id: uuidv4(),
                     content: `${collectionName}: ${openRouterResponse}`,
-                  });
-                } catch (error) {
-                  console.error(
-                    `Error processing ${collectionName} with OpenRouter:`,
-                    error
-                  );
-                  responseOptions.push({
-                    id: uuidv4(),
-                    content: `Collection ${collectionName}: Failed to process with AI. ${
-                      error instanceof Error ? error.message : "Unknown error"
-                    }`,
-                  });
-                }
-              } else {
-                responseOptions.push({
-                  id: uuidv4(),
-                  content: `Collection ${collectionName}: No content available`,
-                });
-              }
+                  }))
+                  .catch(error => {
+                    console.error(`Error processing ${collectionName} with OpenRouter:`, error);
+                    return {
+                      id: uuidv4(),
+                      content: `Collection ${collectionName}: Failed to process with AI. ${
+                        error instanceof Error ? error.message : "Unknown error"
+                      }`,
+                    };
+                  })
+              );
             } else {
+              // Add non-async option for collections with no content
               responseOptions.push({
                 id: uuidv4(),
-                content: `Collection ${collectionName}: No results found`,
+                content: `Collection ${collectionName}: No content available`,
               });
             }
+          } else {
+            // Add non-async option for collections with no results
+            responseOptions.push({
+              id: uuidv4(),
+              content: `Collection ${collectionName}: No results found`,
+            });
           }
         }
 
-        // If no valid responses were generated (other than GPT), add a fallback
-        if (responseOptions.length === 1) { // Only GPT response exists
+        // Execute all OpenRouter calls in parallel
+        console.log(`Executing ${openRouterCalls.length} OpenRouter calls in parallel...`);
+        const parallelResults = await Promise.allSettled(openRouterCalls);
+        
+        // Process parallel results
+        parallelResults.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            responseOptions.push(result.value);
+          } else {
+            console.error("Parallel OpenRouter call failed:", result.reason);
+            responseOptions.push({
+              id: uuidv4(),
+              content: `Error: Failed to process response. ${result.reason}`,
+            });
+          }
+        });
+
+        // If no valid responses were generated, add a fallback
+        if (responseOptions.length === 0) {
           responseOptions.push({
             id: uuidv4(),
             content: "No valid responses could be generated from the available collections.",
