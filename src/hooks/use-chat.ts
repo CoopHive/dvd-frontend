@@ -54,12 +54,6 @@ export type ResponseOption = {
 
 export type ResponseMode = "manual" | "scoring" | "ranking";
 
-// For debugging
-const logApiRequest = (url: string, payload: Record<string, unknown>) => {
-  console.log(`Sending request to: ${url}`);
-  console.log("Request payload:", JSON.stringify(payload, null, 2));
-};
-
 // Type definitions for API responses
 interface CollectionResult {
   results?: Array<{
@@ -75,16 +69,6 @@ interface ApiResponse {
   collection_names?: string[];
   user_email?: string;
   collection_results?: Record<string, CollectionResult>;
-}
-
-interface OpenRouterChoice {
-  message?: {
-    content?: string;
-  };
-}
-
-interface OpenRouterResponse {
-  choices?: OpenRouterChoice[];
 }
 
 export const useChat = () => {
@@ -263,175 +247,78 @@ export const useChat = () => {
   }, [router, userId]);
 
 
-  // Process collection content with OpenRouter
+  // Process collection content with OpenRouter via backend API
   const processWithOpenRouter = useCallback(async (
     userQuery: string,
     contents: string[],
     collectionName: string
   ): Promise<string> => {
-    if (!OPENROUTER_CONFIG.apiKey) {
-      return "Please add your OpenRouter API key.";
-    }
-
-    // Combine the content into a context string
-    const context = contents.join("\n\n");
-
-    // Prepare the message for OpenRouter
-    const openRouterPayload = {
-      model: openRouterModel, // <-- use the selected model from state
-      messages: [
-        {
-          role: "system",
-          content: customOpenRouterPrompt
-            .replace(/\{collectionName\}/g, collectionName)
-            .replace(/\{context\}/g, context),
-        },
-        {
-          role: "user",
-          content: userQuery,
-        },
-      ],
-    };
-
-    console.log(
-      `Sending to OpenRouter (collection: ${collectionName}) with model "${openRouterModel}":`,
-      openRouterPayload
-    );
-
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
     try {
-      const response = await fetch(OPENROUTER_CONFIG.url, {
+      const response = await fetch("/api/openrouter", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENROUTER_CONFIG.apiKey}`,
-          "HTTP-Referer": window.location.origin,
-          "X-Title": "Chat UI Demo",
         },
-        body: JSON.stringify(openRouterPayload),
-        signal: controller.signal,
+        body: JSON.stringify({
+          type: 'process',
+          model: openRouterModel,
+          userQuery,
+          contents,
+          collectionName,
+          customPrompt: customOpenRouterPrompt,
+        }),
       });
 
-      clearTimeout(timeoutId); // Clear timeout on successful response
-
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
-      const result = (await response.json()) as OpenRouterResponse;
-      console.log(
-        `OpenRouter response (collection: ${collectionName}):`,
-        result
-      );
-
-      // Extract the assistant's response
-      if (result.choices?.[0]?.message?.content) {
-        return result.choices[0].message.content;
-      }
-
-      return "No response received from OpenRouter.";
+      const result = await response.json();
+      return result.content || "No response received from OpenRouter.";
     } catch (error) {
-      clearTimeout(timeoutId); // Clear timeout on error
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(`OpenRouter API timeout for collection ${collectionName}`);
-      }
+      console.error(`Error processing ${collectionName} with OpenRouter:`, error);
       throw error;
     }
   }, [openRouterModel, customOpenRouterPrompt]);
 
-  // Create enhanced query using chat context
+  // Create enhanced query using chat context via backend API
   const createEnhancedQuery = useCallback(async (
     userQuery: string,
     chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>
   ): Promise<string> => {
-    if (!OPENROUTER_CONFIG.apiKey) {
-      console.warn("No OpenRouter API key available, using original query");
-      return userQuery;
-    }
-
     // If there are no previous messages, just return the original query
     if (chatMessages.length === 0) {
       return userQuery;
     }
 
-    // Build conversation context from recent messages (last 10 messages max to avoid token limits)
-    const recentMessages = chatMessages.slice(-10);
-    let conversationContext = "";
-    
-    recentMessages.forEach((msg) => {
-      const role = msg.role === 'user' ? 'User' : 'Assistant';
-      conversationContext += `${role}: ${msg.content}\n\n`;
-    });
-
-    // Prepare the message for OpenRouter to create an enhanced query
-    const queryEnhancementPayload = {
-      model: openRouterModel,
-      messages: [
-        {
-          role: "system",
-          content: `You are a query enhancement assistant. Your task is to create a comprehensive, self-contained search query that incorporates relevant context from the conversation history.
-
-          Given the conversation history and the user's new question, create an enhanced search query that:
-          1. Includes relevant context from previous questions and answers when needed
-          2. Is self-contained and can be understood without the conversation history
-          3. Maintains the user's original intent but adds necessary context for better database search results
-          4. Is concise but comprehensive
-          5. Focuses on the information needed to answer the current question
-
-          IMPORTANT: Only return the improved query text, nothing else. Do not include explanations, quotation marks, or any other formatting.
-
-          Conversation History:
-          ${conversationContext}
-
-          New User Question: ${userQuery}
-
-          Create an enhanced search query:`,
-                  },
-        {
-          role: "user",
-          content: userQuery,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 200,
-    };
-
     try {
       console.log("Creating enhanced query with context...");
       console.log(`Using OpenRouter model: ${openRouterModel}`);
       
-      // Create AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout
-
-      const response = await fetch(OPENROUTER_CONFIG.url, {
+      const response = await fetch("/api/openrouter", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENROUTER_CONFIG.apiKey}`,
-          "HTTP-Referer": window.location.origin,
-          "X-Title": "Chat UI Demo - Query Enhancement",
         },
-        body: JSON.stringify(queryEnhancementPayload),
-        signal: controller.signal,
+        body: JSON.stringify({
+          type: 'enhance',
+          model: openRouterModel,
+          userQuery,
+          chatMessages,
+        }),
       });
 
-      clearTimeout(timeoutId); // Clear timeout on successful response
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Query enhancement failed (${response.status}): ${errorText}`);
+        const errorData = await response.json();
+        console.error(`Query enhancement failed (${response.status}): ${errorData.error}`);
         return userQuery; // Fall back to original query
       }
 
-      const result = (await response.json()) as OpenRouterResponse;
+      const result = await response.json();
       
-      if (result.choices?.[0]?.message?.content) {
-        const enhancedQuery = result.choices[0].message.content.trim();
+      if (result.content) {
+        const enhancedQuery = result.content.trim();
         console.log("Original query:", userQuery);
         console.log("Enhanced query:", enhancedQuery);
         return enhancedQuery;
@@ -444,83 +331,37 @@ export const useChat = () => {
     }
   }, [openRouterModel]);
 
-  // Generate contextual GPT response without RAG
+  // Generate contextual GPT response without RAG via backend API
   const generateContextualGPTResponse = useCallback(async (
     userQuery: string,
     chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>
   ): Promise<string> => {
-    if (!OPENROUTER_CONFIG.apiKey) {
-      return "OpenRouter API key is required for GPT responses.";
-    }
-
-    // Build conversation context from recent messages (last 15 messages max)
-    const recentMessages = chatMessages.slice(-15);
-    
-    // Create messages array for the conversation
-    const messages = [];
-    
-    // Add system message
-    messages.push({
-      role: "system",
-      content: `You are a helpful AI assistant. Please respond to the user's question based on the conversation history provided. Use your general knowledge and reasoning abilities to provide a comprehensive and helpful response. Format your response with markdown: use **bold** for important points, bullet lists (•) for multiple items, and organize information in a readable format.
-
-If the conversation contains previous responses from database searches or other sources, you may reference and build upon that information, but do not claim to have access to specific databases or documents unless they were mentioned in the conversation history.
-
-Provide a thoughtful, well-structured response that addresses the user's question directly.`,
-    });
-
-    // Add conversation history
-    recentMessages.forEach((msg) => {
-      messages.push({
-        role: msg.role,
-        content: msg.content,
-      });
-    });
-
-    // Add the current user query
-    messages.push({
-      role: "user",
-      content: userQuery,
-    });
-
-    const gptPayload = {
-      model: openRouterModel,
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 1500,
-    };
-
     try {
       console.log("Generating contextual GPT response...");
       console.log(`Using OpenRouter model: ${openRouterModel}`);
       
-      // Create AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-      const response = await fetch(OPENROUTER_CONFIG.url, {
+      const response = await fetch("/api/openrouter", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENROUTER_CONFIG.apiKey}`,
-          "HTTP-Referer": window.location.origin,
-          "X-Title": "Chat UI Demo - Contextual Response",
         },
-        body: JSON.stringify(gptPayload),
-        signal: controller.signal,
+        body: JSON.stringify({
+          type: 'contextual',
+          model: openRouterModel,
+          userQuery,
+          chatMessages,
+        }),
       });
 
-      clearTimeout(timeoutId); // Clear timeout on successful response
-
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`GPT API error (${response.status}): ${errorText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
-      const result = (await response.json()) as OpenRouterResponse;
+      const result = await response.json();
       
-      if (result.choices?.[0]?.message?.content) {
-        return result.choices[0].message.content;
+      if (result.content) {
+        return result.content;
       }
 
       return "No response received from GPT.";
@@ -560,7 +401,6 @@ Provide a thoughtful, well-structured response that addresses the user's questio
 
       // Use light server for evaluation operations
       const evaluateUrl = `${API_CONFIG.light.url}${API_CONFIG.light.endpoints.evaluate}`;
-      logApiRequest(evaluateUrl, payload);
 
       try {
         const response = await fetch(evaluateUrl, {

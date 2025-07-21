@@ -23,9 +23,7 @@ export const API_CONFIG = {
   model: "openai/gpt-4o-mini",
 };
 
-// OpenRouter API configuration
+// OpenRouter configuration (API key is now server-side only)
 export const OPENROUTER_CONFIG = {
-  url: "https://openrouter.ai/api/v1/chat/completions",
-  apiKey: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ?? "",
   defaultModel: "openai/gpt-4o-mini",
 }; 
