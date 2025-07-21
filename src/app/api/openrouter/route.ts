@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -21,6 +22,16 @@ interface OpenRouterResponse {
   }>;
 }
 
+interface OpenRouterPayload {
+  model: string;
+  messages: Array<{
+    role: string;
+    content: string;
+  }>;
+  temperature?: number;
+  max_tokens?: number;
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!OPENROUTER_API_KEY) {
@@ -30,10 +41,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body: OpenRouterRequest = await request.json();
+    const body = await request.json() as OpenRouterRequest;
     const { type, model, userQuery, contents, collectionName, chatMessages, customPrompt } = body;
 
-    let payload: any;
+    let payload: OpenRouterPayload;
     let timeoutMs = 30000; // Default 30 seconds
 
     switch (type) {
@@ -87,21 +98,21 @@ export async function POST(request: NextRequest) {
               role: "system",
               content: `You are a query enhancement assistant. Your task is to create a comprehensive, self-contained search query that incorporates relevant context from the conversation history.
 
-            Given the conversation history and the user's new question, create an enhanced search query that:
-            1. Includes relevant context from previous questions and answers when needed
-            2. Is self-contained and can be understood without the conversation history
-            3. Maintains the user's original intent but adds necessary context for better database search results
-            4. Is concise but comprehensive
-            5. Focuses on the information needed to answer the current question
+Given the conversation history and the user's new question, create an enhanced search query that:
+1. Includes relevant context from previous questions and answers when needed
+2. Is self-contained and can be understood without the conversation history
+3. Maintains the user's original intent but adds necessary context for better database search results
+4. Is concise but comprehensive
+5. Focuses on the information needed to answer the current question
 
-            IMPORTANT: Only return the improved query text, nothing else. Do not include explanations, quotation marks, or any other formatting.
+IMPORTANT: Only return the improved query text, nothing else. Do not include explanations, quotation marks, or any other formatting.
 
-            Conversation History:
-            ${conversationContext}
+Conversation History:
+${conversationContext}
 
-            New User Question: ${userQuery}
+New User Question: ${userQuery}
 
-            Create an enhanced search query:`,
+Create an enhanced search query:`,
             },
             {
               role: "user",
@@ -132,9 +143,9 @@ export async function POST(request: NextRequest) {
           role: "system",
           content: `You are a helpful AI assistant. Please respond to the user's question based on the conversation history provided. Use your general knowledge and reasoning abilities to provide a comprehensive and helpful response. Format your response with markdown: use **bold** for important points, bullet lists (•) for multiple items, and organize information in a readable format.
 
-            If the conversation contains previous responses from database searches or other sources, you may reference and build upon that information, but do not claim to have access to specific databases or documents unless they were mentioned in the conversation history.
+If the conversation contains previous responses from database searches or other sources, you may reference and build upon that information, but do not claim to have access to specific databases or documents unless they were mentioned in the conversation history.
 
-            Provide a thoughtful, well-structured response that addresses the user's question directly.`,
+Provide a thoughtful, well-structured response that addresses the user's question directly.`,
         });
 
         // Add conversation history
@@ -194,7 +205,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const result: OpenRouterResponse = await response.json();
+      const result = await response.json() as OpenRouterResponse;
       
       if (result.choices?.[0]?.message?.content) {
         return NextResponse.json({

@@ -59,9 +59,11 @@ interface CollectionResult {
   results?: Array<{
     metadata?: {
       content?: string;
+      [key: string]: unknown;
     };
+    [key: string]: unknown;
   }>;
-  error?: string;
+  [key: string]: unknown;
 }
 
 interface ApiResponse {
@@ -69,6 +71,13 @@ interface ApiResponse {
   collection_names?: string[];
   user_email?: string;
   collection_results?: Record<string, CollectionResult>;
+}
+
+// OpenRouter API response interface
+interface OpenRouterApiResponse {
+  content?: string;
+  success?: boolean;
+  error?: string;
 }
 
 export const useChat = () => {
@@ -270,12 +279,12 @@ export const useChat = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        const errorData = await response.json() as OpenRouterApiResponse;
+        throw new Error(errorData.error ?? `HTTP ${response.status}`);
       }
 
-      const result = await response.json();
-      return result.content || "No response received from OpenRouter.";
+      const result = await response.json() as OpenRouterApiResponse;
+      return result.content ?? "No response received from OpenRouter.";
     } catch (error) {
       console.error(`Error processing ${collectionName} with OpenRouter:`, error);
       throw error;
@@ -310,15 +319,15 @@ export const useChat = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json() as OpenRouterApiResponse;
         console.error(`Query enhancement failed (${response.status}): ${errorData.error}`);
         return userQuery; // Fall back to original query
       }
 
-      const result = await response.json();
+      const result = await response.json() as OpenRouterApiResponse;
       
       if (result.content) {
-        const enhancedQuery = result.content.trim();
+        const enhancedQuery: string = result.content.trim();
         console.log("Original query:", userQuery);
         console.log("Enhanced query:", enhancedQuery);
         return enhancedQuery;
@@ -354,11 +363,11 @@ export const useChat = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        const errorData = await response.json() as OpenRouterApiResponse;
+        throw new Error(errorData.error ?? `HTTP ${response.status}`);
       }
 
-      const result = await response.json();
+      const result = await response.json() as OpenRouterApiResponse;
       
       if (result.content) {
         return result.content;
