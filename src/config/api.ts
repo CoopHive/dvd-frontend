@@ -1,10 +1,9 @@
-// API configuration for separate light and heavy servers
+// API configuration for distributed server architecture
 export const API_CONFIG = {
   // Light server - quick operations (evaluation, status)
   light: {
     url: process.env.NEXT_PUBLIC_LIGHT_SERVER_URL ?? "http://localhost:5001",
     endpoints: {
-      evaluate: "/api/evaluate",
       status: "/api/status", 
       health: "/health",
       validateEmail: "/api/auth/validate-email",
@@ -17,6 +16,14 @@ export const API_CONFIG = {
     endpoints: {
       ingest: "/api/ingest/gdrive",
       embed: "/api/embed",
+      health: "/health"
+    }
+  },
+  // Database server - database creation and management
+  database: {
+    url: process.env.NEXT_PUBLIC_DATABASE_SERVER_URL ?? "http://localhost:5003",
+    endpoints: {
+      evaluate: "/api/evaluate",
       health: "/health"
     }
   },

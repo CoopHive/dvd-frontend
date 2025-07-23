@@ -409,7 +409,7 @@ export const useChat = () => {
       };
 
       // Use light server for evaluation operations
-      const evaluateUrl = `${API_CONFIG.light.url}${API_CONFIG.light.endpoints.evaluate}`;
+      const evaluateUrl = `${API_CONFIG.database.url}${API_CONFIG.database.endpoints.evaluate}`;
 
       try {
         const response = await fetch(evaluateUrl, {
@@ -655,7 +655,7 @@ export const useChat = () => {
         });
 
         // Send to backend
-        const response = await fetch(`${API_CONFIG.light.url}/api/evaluation/store`, {
+        const response = await fetch(`${API_CONFIG.database.url}/api/evaluation/store`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
