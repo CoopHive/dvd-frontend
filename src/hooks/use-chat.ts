@@ -88,7 +88,7 @@ export const useChat = (selectedDatabase?: string) => {
   const userId = session?.user?.email ?? "";
 
   // Use selectedDatabase if provided, otherwise fall back to userId
-  const targetDatabase = selectedDatabase || userId;
+  const targetDatabase = selectedDatabase ?? userId;
 
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -618,7 +618,7 @@ export const useChat = (selectedDatabase?: string) => {
         ];
       }
     },
-    [processWithOpenRouter, activeChat, session, generateContextualGPTResponse, createEnhancedQuery, openRouterModel, targetDatabase]
+    [processWithOpenRouter, activeChat, generateContextualGPTResponse, createEnhancedQuery, openRouterModel, targetDatabase]
   );
 
   // Store evaluation data to backend

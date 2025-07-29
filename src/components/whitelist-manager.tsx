@@ -46,7 +46,7 @@ export default function WhitelistManager() {
       });
       
       if (response.ok) {
-        const data: WhitelistInfo = await response.json();
+        const data = await response.json() as WhitelistInfo;
         setWhitelistInfo(data);
       } else {
         console.error("Failed to fetch whitelist info:", response.status);
@@ -89,13 +89,13 @@ export default function WhitelistManager() {
       });
 
       if (response.ok) {
-        const data: WhitelistResponse = await response.json();
+        const data = await response.json() as WhitelistResponse;
         setFeedbackMessage({ type: 'success', message: data.message });
         setNewUserEmail("");
         await fetchWhitelistInfo(); // Refresh the list
       } else {
-        const errorData = await response.json();
-        setFeedbackMessage({ type: 'error', message: errorData.detail || 'Failed to add user to whitelist' });
+        const errorData = await response.json() as { detail?: string };
+        setFeedbackMessage({ type: 'error', message: errorData.detail ?? 'Failed to add user to whitelist' });
       }
     } catch (error) {
       console.error("Error adding user to whitelist:", error);
@@ -123,12 +123,12 @@ export default function WhitelistManager() {
       });
 
       if (response.ok) {
-        const data: WhitelistResponse = await response.json();
+        const data = await response.json() as WhitelistResponse;
         setFeedbackMessage({ type: 'success', message: data.message });
         await fetchWhitelistInfo(); // Refresh the list
       } else {
-        const errorData = await response.json();
-        setFeedbackMessage({ type: 'error', message: errorData.detail || 'Failed to remove user from whitelist' });
+        const errorData = await response.json() as { detail?: string };
+        setFeedbackMessage({ type: 'error', message: errorData.detail ?? 'Failed to remove user from whitelist' });
       }
     } catch (error) {
       console.error("Error removing user from whitelist:", error);
@@ -210,7 +210,7 @@ export default function WhitelistManager() {
             </Button>
           </div>
           <p className="text-xs text-zinc-500">
-            Users you whitelist will be able to query your database and you'll be able to query theirs.
+            Users you whitelist will be able to query your database and you&apos;ll be able to query theirs.
           </p>
         </div>
       </Card>
@@ -228,7 +228,7 @@ export default function WhitelistManager() {
           {/* Users I've Whitelisted */}
           <Card className="p-4 bg-[#1a1a1a] border-zinc-800">
             <h3 className="text-sm font-medium text-zinc-300 mb-3">
-              Users I've Granted Access ({whitelistInfo?.whitelisted_users.length || 0})
+              Users I&apos;ve Granted Access ({whitelistInfo?.whitelisted_users.length ?? 0})
             </h3>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {whitelistInfo?.whitelisted_users.length === 0 ? (
@@ -257,7 +257,7 @@ export default function WhitelistManager() {
           {/* Users Who've Whitelisted Me */}
           <Card className="p-4 bg-[#1a1a1a] border-zinc-800">
             <h3 className="text-sm font-medium text-zinc-300 mb-3">
-              Users Who've Granted Me Access ({whitelistInfo?.whitelisted_by.length || 0})
+              Users Who&apos;ve Granted Me Access ({whitelistInfo?.whitelisted_by.length ?? 0})
             </h3>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {whitelistInfo?.whitelisted_by.length === 0 ? (

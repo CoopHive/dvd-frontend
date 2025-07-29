@@ -21,7 +21,6 @@ import {
   Settings,
   Info,
   Users,
-  Database,
 } from "lucide-react";
 import { useChat, DEFAULT_OPENROUTER_PROMPT } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
@@ -133,10 +132,15 @@ export default function ChatInterface() {
       });
       
       if (response.ok) {
-        const data = await response.json();
+        const data = await response.json() as {
+          success: boolean;
+          user_email: string;
+          whitelisted_users: string[];
+          whitelisted_by: string[];
+        };
         const databases = [
           // User's own database
-          { email: session.user.email, displayName: `${session.user.name || session.user.email} (You)` },
+          { email: session.user.email, displayName: `${session.user.name ?? session.user.email} (You)` },
           // Databases from people who whitelisted this user
           ...data.whitelisted_by.map((email: string) => ({
             email,
@@ -149,7 +153,7 @@ export default function ChatInterface() {
       console.error("Error fetching available databases:", error);
       // Fallback to just user's own database
       setAvailableDatabases([
-        { email: session.user.email, displayName: `${session.user.name || session.user.email} (You)` }
+        { email: session.user.email, displayName: `${session.user.name ?? session.user.email} (You)` }
       ]);
     }
   }, [session?.user?.email, session?.user?.name]);
