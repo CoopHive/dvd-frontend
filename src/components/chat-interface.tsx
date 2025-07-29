@@ -20,6 +20,8 @@ import {
   X,
   Settings,
   Info,
+  Users,
+  Database,
 } from "lucide-react";
 import { useChat, DEFAULT_OPENROUTER_PROMPT } from "~/hooks/use-chat";
 import { formatDistanceToNow } from "date-fns";
@@ -37,8 +39,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
+import WhitelistManager from "~/components/whitelist-manager";
 
 export default function ChatInterface() {
+  const { data: session } = useSession();
+  const [selectedDatabase, setSelectedDatabase] = useState<string>("");
+  
+  // Update selectedDatabase when session changes
+  useEffect(() => {
+    if (session?.user?.email) {
+      setSelectedDatabase(session.user.email);
+    }
+  }, [session?.user?.email]);
+
   const {
     chats,
     activeChat,
@@ -69,9 +82,8 @@ export default function ChatInterface() {
     // Pull in custom prompt state:
     customOpenRouterPrompt,
     setCustomOpenRouterPrompt,
-  } = useChat();
+  } = useChat(selectedDatabase);
 
-  const { data: session } = useSession();
   const [showSidebar, setShowSidebar] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [googleDriveLink, setGoogleDriveLink] = useState("");
@@ -80,6 +92,7 @@ export default function ChatInterface() {
   const [showPromptDialog, setShowPromptDialog] = useState(false);
   const [tempPrompt, setTempPrompt] = useState(customOpenRouterPrompt);
   const [showInstructionsModal, setShowInstructionsModal] = useState(false);
+  const [showWhitelistModal, setShowWhitelistModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -103,6 +116,48 @@ export default function ChatInterface() {
   const availableConverters = ["marker", "openai", "markitdown"];
   const availableChunkers = ["fixed_length", "recursive", "markdown_aware", "semantic_split"];
   const availableEmbedders = ["openai", "bge", "bgelarge"];
+
+  // Available databases state
+  const [availableDatabases, setAvailableDatabases] = useState<Array<{email: string, displayName: string}>>([]);
+
+  // Function to fetch available databases
+  const fetchAvailableDatabases = useCallback(async () => {
+    if (!session?.user?.email) return;
+
+    try {
+      const response = await fetch(`${API_CONFIG.database.url}${API_CONFIG.database.endpoints.whitelistGet}/${encodeURIComponent(session.user.email)}`, {
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const databases = [
+          // User's own database
+          { email: session.user.email, displayName: `${session.user.name || session.user.email} (You)` },
+          // Databases from people who whitelisted this user
+          ...data.whitelisted_by.map((email: string) => ({
+            email,
+            displayName: email
+          }))
+        ];
+        setAvailableDatabases(databases);
+      }
+    } catch (error) {
+      console.error("Error fetching available databases:", error);
+      // Fallback to just user's own database
+      setAvailableDatabases([
+        { email: session.user.email, displayName: `${session.user.name || session.user.email} (You)` }
+      ]);
+    }
+  }, [session?.user?.email, session?.user?.name]);
+
+  // Fetch available databases on component mount and when session changes
+  useEffect(() => {
+    void fetchAvailableDatabases();
+  }, [fetchAvailableDatabases]);
 
   // Check upload status function
   const checkUploadStatus = useCallback(async () => {
@@ -750,6 +805,16 @@ export default function ChatInterface() {
                 <Plus className="h-4 w-4 transition-transform duration-200 group-hover:rotate-90" />
                 New Chat
               </Button>
+              
+              {/* Whitelist Management Button */}
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2 bg-[#2a2a2a] border-none hover:bg-[#343541] text-zinc-300 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] transform mt-2"
+                onClick={() => setShowWhitelistModal(true)}
+              >
+                <Users className="h-4 w-4" />
+                Manage Access
+              </Button>
             </div>
 
             <div className="flex-1 overflow-auto py-2 px-2">
@@ -888,6 +953,20 @@ export default function ChatInterface() {
                 <option value="cohere/command-r-plus">Command R Plus</option>
                 <option value="amazon/nova-pro-v1">Nova Pro V1</option>
               </optgroup>
+            </select>
+
+            {/* Database Selector */}
+            <select 
+              value={selectedDatabase} 
+              onChange={(e) => setSelectedDatabase(e.target.value)}
+              className="bg-[#2a2a2a] border-none text-zinc-300 text-xs px-2 py-1 rounded hover:bg-[#3a3a3a] focus:outline-none focus:ring-1 focus:ring-[#1a7f64] cursor-pointer"
+              title="Select Database to Query"
+            >
+              {availableDatabases.map((db) => (
+                <option key={db.email} value={db.email}>
+                  {db.displayName}
+                </option>
+              ))}
             </select>
 
             {/* Button to open prompt editor */}
@@ -1639,6 +1718,24 @@ export default function ChatInterface() {
               Got it!
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Whitelist Management Modal */}
+      <Dialog open={showWhitelistModal} onOpenChange={(open) => {
+        setShowWhitelistModal(open);
+        if (!open) {
+          // Refresh available databases when modal is closed
+          void fetchAvailableDatabases();
+        }
+      }}>
+        <DialogContent className="bg-[#1a1a1a] border-zinc-800 text-zinc-300 max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white text-xl font-bold">Database Access Management</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <WhitelistManager />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

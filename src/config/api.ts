@@ -24,7 +24,10 @@ export const API_CONFIG = {
     url: process.env.NEXT_PUBLIC_DATABASE_SERVER_URL ?? "http://localhost:5003",
     endpoints: {
       evaluate: "/api/evaluate",
-      health: "/health"
+      health: "/health",
+      whitelistAdd: "/api/whitelist/add",
+      whitelistGet: "/api/whitelist",
+      whitelistRemove: "/api/whitelist/remove"
     }
   },
   model: "openai/gpt-4o-mini",

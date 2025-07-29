@@ -80,12 +80,15 @@ interface OpenRouterApiResponse {
   error?: string;
 }
 
-export const useChat = () => {
+export const useChat = (selectedDatabase?: string) => {
   const router = useRouter();
   const params = useParams();
   const { data: session } = useSession();
 
   const userId = session?.user?.email ?? "";
+
+  // Use selectedDatabase if provided, otherwise fall back to userId
+  const targetDatabase = selectedDatabase || userId;
 
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -405,7 +408,7 @@ export const useChat = () => {
         query: enhancedQuery, // Use enhanced query for database search
         db_path: null,
         model_name: openRouterModel, // Use selected model instead of API_CONFIG.model
-        user_email: session?.user?.email, // Include user email for additional context
+        user_email: targetDatabase, // Use selected database email
       };
 
       // Use light server for evaluation operations
@@ -615,7 +618,7 @@ export const useChat = () => {
         ];
       }
     },
-    [processWithOpenRouter, activeChat, session, generateContextualGPTResponse, createEnhancedQuery, openRouterModel]
+    [processWithOpenRouter, activeChat, session, generateContextualGPTResponse, createEnhancedQuery, openRouterModel, targetDatabase]
   );
 
   // Store evaluation data to backend
