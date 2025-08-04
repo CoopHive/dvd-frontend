@@ -23,28 +23,37 @@ export const DEFAULT_OPENROUTER_PROMPT = `You are an expert research assistant a
 • Clearly distinguish between direct facts from the documents and any logical inferences
 • Preserve the scientific accuracy and terminology from the source material
 
+**CITATION REQUIREMENTS:**
+• Use inline citations throughout your response in the format [1], [2], [3], etc.
+• Each unique source should have its own citation number
+• When referencing information from a source, immediately follow with the appropriate citation number
+• Create a "References" section at the end listing all sources with their full citations
+• Extract the citation information from the "Source:" lines in the provided content
+
 **RESPONSE FORMATTING:**
 • Use **bold** for key findings, important terms, and main conclusions
 • Use bullet points (•) for lists, multiple findings, or step-by-step information
 • Use numbered lists (1., 2., 3.) when describing processes, methodologies, or ranked information
-• Use > blockquotes for direct citations or important quotes from the papers
+• Use > blockquotes for direct quotes from the papers (with inline citations)
 • Organize information hierarchically with clear sections when appropriate
+• End with a "References" section listing all cited sources
 
 **CONTENT STRUCTURE:**
-1. Lead with the most relevant and direct answer to the question
-2. Support with specific evidence, data, or findings from the documents
-3. Include relevant context that helps understand the main answer
+1. Lead with the most relevant and direct answer to the question (with citations)
+2. Support with specific evidence, data, or findings from the documents (with citations)
+3. Include relevant context that helps understand the main answer (with citations)
 4. Note any limitations or gaps in the available information
+5. Provide complete "References" section at the end
 
 **HANDLING UNCERTAINTY:**
-• If information is incomplete: "Based on the available documents, [partial answer], however more information would be needed to fully address [specific aspect]"
+• If information is incomplete: "Based on the available documents, [partial answer] [citation], however more information would be needed to fully address [specific aspect]"
 • If no relevant information exists: "The provided documents from collection {collectionName} do not contain information about [specific topic]"
-• If information conflicts: Present both perspectives clearly and note the discrepancy
+• If information conflicts: Present both perspectives clearly with their respective citations and note the discrepancy
 
 Context from collection "{collectionName}":
 {context}
 
-Provide a comprehensive, accurate response that maximizes the value of the available information while maintaining scientific rigor.`;
+Provide a comprehensive, accurate response with proper inline citations and a complete references section at the end.`;
 
 export type ResponseOption = {
   id: string;
@@ -510,8 +519,18 @@ export const useChat = (selectedDatabase?: string) => {
           if (collectionData && typeof collectionData === 'object' && 'results' in collectionData && collectionData.results) {
             const contents = collectionData.results
               .map((result) => {
-                // Extract content from metadata if it exists
-                return result.metadata?.content ?? null;
+                // Extract content and citation from metadata if they exist
+                const content = result.metadata?.content ?? null;
+                const citation = result.metadata?.citation ?? null;
+                
+                if (content) {
+                  // Format content with citation if available
+                  const contentWithCitation = citation && typeof citation === 'string'
+                    ? `${content}\n\nSource: ${citation}`
+                    : `${content}`;
+                  return contentWithCitation;
+                }
+                return null;
               })
               .filter((content): content is string => content !== null); // Type guard
 
