@@ -1,6 +1,5 @@
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { API_CONFIG } from "../../config/api";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -34,7 +33,7 @@ async function isEmailAllowed(email: string): Promise<boolean> {
   if (!email) return false;
   
   try {
-    const response = await fetch(`${API_CONFIG.light.url}${API_CONFIG.light.endpoints.validateEmail}`, {
+    const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/validate-email`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -47,7 +46,7 @@ async function isEmailAllowed(email: string): Promise<boolean> {
     }
 
     const data = await response.json() as EmailValidationResponse;
-    return data.isValid;
+    return data.isValid || false;
   } catch (error) {
     console.error('Error validating email:', error);
     return false;
@@ -87,6 +86,40 @@ export const authConfig = {
         
         if (!email || !(await isEmailAllowed(email))) {
           // Redirect to access denied page
+          return "/auth/access-denied";
+        }
+        
+        // After successful email validation, mint JWT tokens and set cookies
+        try {
+          console.log('🔑 Creating JWT tokens for user:', email);
+          const { createTokens } = await import('@/lib/jwt');
+          const { cookies } = await import('next/headers');
+          
+          // Create JWT tokens
+          const tokens = createTokens(email.toLowerCase());
+          
+          // Set JWT tokens as HttpOnly cookies
+          const cookieStore = await cookies();
+          
+          cookieStore.set('access_token', tokens.accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 15 * 60 // 15 minutes
+          });
+          
+          cookieStore.set('refresh_token', tokens.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 30 * 24 * 60 * 60 // 30 days
+          });
+          
+          console.log('✅ JWT tokens created and cookies set for:', email);
+        } catch (error) {
+          console.error('Error creating JWT tokens:', error);
           return "/auth/access-denied";
         }
       }

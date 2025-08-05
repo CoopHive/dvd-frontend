@@ -420,17 +420,9 @@ export const useChat = (selectedDatabase?: string) => {
         user_email: targetDatabase, // Use selected database email
       };
 
-      // Use light server for evaluation operations
-      const evaluateUrl = `${API_CONFIG.database.url}${API_CONFIG.database.endpoints.evaluate}`;
-
+      // Use database server for evaluation operations
       try {
-        const response = await fetch(evaluateUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
+        const response = await API_CONFIG.database.evaluate(payload);
 
         console.log(`API response status: ${response.status}`);
 
@@ -677,25 +669,19 @@ export const useChat = (selectedDatabase?: string) => {
         });
 
         // Send to backend
-        const response = await fetch(`${API_CONFIG.database.url}/api/evaluation/store`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const response = await API_CONFIG.database.storeEvaluation({
+          user_email: session.user.email,
+          query,
+          mode,
+          options: formattedOptions,
+          selected_option_id: selectedOptionId,
+          chat_id: chatId,
+          timestamp: Date.now() / 1000,
+          metadata: {
+            model: openRouterModel,
+            total_collections: collectionInfo?.totalCollections ?? 0,
+            collection_names: collectionInfo?.collectionNames ?? [],
           },
-          body: JSON.stringify({
-            user_email: session.user.email,
-            query,
-            mode,
-            options: formattedOptions,
-            selected_option_id: selectedOptionId,
-            chat_id: chatId,
-            timestamp: Date.now() / 1000,
-            metadata: {
-              model: openRouterModel,
-              total_collections: collectionInfo?.totalCollections ?? 0,
-              collection_names: collectionInfo?.collectionNames ?? [],
-            },
-          }),
         });
 
         if (!response.ok) {

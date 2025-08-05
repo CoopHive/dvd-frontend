@@ -1,19 +1,19 @@
 "use client";
 
 import { redirect } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useJWTAuth } from "~/hooks/use-jwt-auth";
 import ChatInterface from "~/components/chat-interface";
 
 export default function ChatPage() {
-  const { status } = useSession();
+  const { isAuthenticated, isLoading } = useJWTAuth();
   
   // If the user is not authenticated, redirect to signin page
-  if (status === "unauthenticated") {
+  if (!isLoading && !isAuthenticated) {
     redirect("/auth/signin");
   }
   
   // If loading, show loading state
-  if (status === "loading") {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#0a0a0a]">
         <div className="flex space-x-2">

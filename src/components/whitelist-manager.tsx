@@ -38,12 +38,7 @@ export default function WhitelistManager() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_CONFIG.database.url}${API_CONFIG.database.endpoints.whitelistGet}/${encodeURIComponent(userEmail)}`, {
-        headers: {
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",
-        },
-      });
+      const response = await API_CONFIG.database.whitelistGet();
       
       if (response.ok) {
         const data = await response.json() as WhitelistInfo;
@@ -76,16 +71,9 @@ export default function WhitelistManager() {
 
     setIsAddingUser(true);
     try {
-      const response = await fetch(`${API_CONFIG.database.url}${API_CONFIG.database.endpoints.whitelistAdd}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          "ngrok-skip-browser-warning": "true",
-        },
-        body: JSON.stringify({
-          requester_email: userEmail,
-          target_email: newUserEmail.trim(),
-        }),
+      const response = await API_CONFIG.database.whitelistAdd({
+        requester_email: userEmail,
+        target_email: newUserEmail.trim(),
       });
 
       if (response.ok) {
@@ -110,16 +98,9 @@ export default function WhitelistManager() {
     if (!userEmail) return;
 
     try {
-      const response = await fetch(`${API_CONFIG.database.url}${API_CONFIG.database.endpoints.whitelistRemove}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          "ngrok-skip-browser-warning": "true",
-        },
-        body: JSON.stringify({
-          requester_email: userEmail,
-          target_email: targetEmail,
-        }),
+      const response = await API_CONFIG.database.whitelistRemove({
+        requester_email: userEmail,
+        target_email: targetEmail,
       });
 
       if (response.ok) {

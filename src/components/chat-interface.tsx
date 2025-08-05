@@ -150,12 +150,7 @@ export default function ChatInterface() {
     if (!session?.user?.email) return;
 
     try {
-      const response = await fetch(`${API_CONFIG.database.url}${API_CONFIG.database.endpoints.whitelistGet}/${encodeURIComponent(session.user.email)}`, {
-        headers: {
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",
-        },
-      });
+      const response = await API_CONFIG.database.whitelistGet();
       
       if (response.ok) {
         const data = await response.json() as {
@@ -196,15 +191,14 @@ export default function ChatInterface() {
     setIsRefreshingStatus(true);
     
     try {
-      const statusUrl = `${API_CONFIG.light.url}/api/status?user_email=${encodeURIComponent(session.user.email)}`;
-      const response = await fetch(statusUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",  // Skip ngrok browser warning for free tunnels
-        },
-        mode: "cors",
-      });
+      // Get the user's email from the session
+      const userEmail = session?.user?.email;
+      if (!userEmail) {
+        console.error("No user email found in session");
+        return;
+      }
+      
+      const response = await API_CONFIG.light.status(userEmail);
 
       if (response.ok) {
         const statusData = await response.json() as {
@@ -276,18 +270,9 @@ export default function ChatInterface() {
     setScrapingError("");
     
     try {
-      const scrapeUrl = `${API_CONFIG.light.url}${API_CONFIG.light.endpoints.researchScrape}`;
-      const response = await fetch(scrapeUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",  // Skip ngrok browser warning for free tunnels
-        },
-        mode: "cors",
-        body: JSON.stringify({
-          research_area: researchArea.trim(),
-          user_email: session.user.email,
-        }),
+      const response = await API_CONFIG.light.researchScrape({
+        research_area: researchArea.trim(),
+        user_email: session.user.email,
       });
 
       if (response.ok) {
@@ -371,23 +356,13 @@ export default function ChatInterface() {
     
     try {
       // Use heavy server for upload/ingest operations
-      const uploadUrl = `${API_CONFIG.heavy.url}${API_CONFIG.heavy.endpoints.ingest}`;
-      console.log("Sending request to:", uploadUrl);
-      const response = await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "ngrok-skip-browser-warning": "true",  // Skip ngrok browser warning for free tunnels
-        },
-        mode: "cors",
-        body: JSON.stringify({
-          drive_url: googleDriveLink.trim(),
-          processing_combinations: processingCombinations
-            .filter(combo => combo.enabled)
-            .map(combo => [combo.converter, combo.chunker, combo.embedder]),
-          user_email: session.user.email,
-        }),
+      console.log("Sending request to heavy server ingest endpoint");
+      const response = await API_CONFIG.heavy.ingest({
+        drive_url: googleDriveLink.trim(),
+        processing_combinations: processingCombinations
+          .filter(combo => combo.enabled)
+          .map(combo => [combo.converter, combo.chunker, combo.embedder]),
+        user_email: session.user.email,
       });
 
       console.log("Response status:", response.status);

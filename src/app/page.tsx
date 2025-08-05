@@ -2,28 +2,34 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useJWTAuth } from "~/hooks/use-jwt-auth";
 
 export default function Home() {
   const router = useRouter();
-  const { status } = useSession();
+  const { isAuthenticated, isLoading } = useJWTAuth();
 
   useEffect(() => {
-    if (status === "authenticated") {
-      router.push("/chat");
-    } else if (status === "unauthenticated") {
-      router.push("/auth/signin");
+    if (!isLoading) {
+      if (isAuthenticated) {
+        router.push("/chat");
+      } else {
+        router.push("/auth/signin");
+      }
     }
-  }, [status, router]);
+  }, [isAuthenticated, isLoading, router]);
 
   // Loading state
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-[#0a0a0a]">
-      <div className="flex space-x-2">
-        <div className="w-3 h-3 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }}></div>
-        <div className="w-3 h-3 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }}></div>
-        <div className="w-3 h-3 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }}></div>
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#0a0a0a]">
+        <div className="flex space-x-2">
+          <div className="w-3 h-3 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }}></div>
+          <div className="w-3 h-3 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }}></div>
+          <div className="w-3 h-3 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }}></div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return null; // This should not render as useEffect will redirect
 } 
