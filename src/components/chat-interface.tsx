@@ -103,6 +103,32 @@ export default function ChatInterface() {
   const [selectedConverters, setSelectedConverters] = useState<string[]>(["markitdown"]);
   const [selectedChunkers, setSelectedChunkers] = useState<string[]>(["recursive"]);
   const [selectedEmbedders, setSelectedEmbedders] = useState<string[]>(["bge"]);
+  
+  // Processing combinations state - generated from selections and can be individually disabled
+  const [processingCombinations, setProcessingCombinations] = useState<Array<{
+    converter: string;
+    chunker: string;
+    embedder: string;
+    enabled: boolean;
+  }>>([]);
+  
+  // Generate combinations when selections change
+  useEffect(() => {
+    const combinations: Array<{converter: string; chunker: string; embedder: string; enabled: boolean}> = [];
+    selectedConverters.forEach(conv => {
+      selectedChunkers.forEach(chunk => {
+        selectedEmbedders.forEach(emb => {
+          combinations.push({
+            converter: conv,
+            chunker: chunk,
+            embedder: emb,
+            enabled: true
+          });
+        });
+      });
+    });
+    setProcessingCombinations(combinations);
+  }, [selectedConverters, selectedChunkers, selectedEmbedders]);
 
   // Upload modal step management
   const [uploadStep, setUploadStep] = useState<1 | 2>(1);
@@ -328,6 +354,7 @@ export default function ChatInterface() {
     setSelectedConverters(["markitdown"]);
     setSelectedChunkers(["recursive"]);
     setSelectedEmbedders(["bge"]);
+    // Processing combinations will be reset by the useEffect when selections change
   };
 
   const handleUploadSubmit = async () => {
@@ -356,9 +383,9 @@ export default function ChatInterface() {
         mode: "cors",
         body: JSON.stringify({
           drive_url: googleDriveLink.trim(),
-          converters: selectedConverters,
-          chunkers: selectedChunkers,
-          embedders: selectedEmbedders,
+          processing_combinations: processingCombinations
+            .filter(combo => combo.enabled)
+            .map(combo => [combo.converter, combo.chunker, combo.embedder]),
           user_email: session.user.email,
         }),
       });
@@ -469,6 +496,17 @@ export default function ChatInterface() {
       setSelectedItems([...selectedItems, item]);
     }
   };
+
+  // Toggle individual combination enabled/disabled
+  const toggleCombination = (index: number) => {
+    setProcessingCombinations(prev => 
+      prev.map((combo, i) => 
+        i === index ? { ...combo, enabled: !combo.enabled } : combo
+      )
+    );
+  };
+
+
 
   return (
     <div className="flex h-screen bg-[#0f0f0f]">
@@ -725,43 +763,39 @@ export default function ChatInterface() {
 
                 {/* Processing Combinations Info */}
                 <div className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-[#1a7f64] rounded-full"></div>
-                    <span className="text-sm font-medium text-zinc-300">Processing Combinations</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-[#1a7f64] rounded-full"></div>
+                      <span className="text-sm font-medium text-zinc-300">Processing Combinations</span>
+                    </div>
+                    <span className="text-xs text-zinc-400">
+                      {processingCombinations.filter(c => c.enabled).length} of {processingCombinations.length} enabled
+                    </span>
                   </div>
-                  <p className="text-xs text-zinc-400 mb-2">
-                    {selectedConverters.length} × {selectedChunkers.length} × {selectedEmbedders.length} = {selectedConverters.length * selectedChunkers.length * selectedEmbedders.length} combinations will be processed
+                  <p className="text-xs text-zinc-400 mb-3">
+                    Click combinations to disable them (crossed out combinations will be skipped)
                   </p>
-                  <div className="flex flex-wrap gap-1">
-                    {(() => {
-                      const allCombinations: string[] = [];
-                      selectedConverters.forEach(conv => {
-                        selectedChunkers.forEach(chunk => {
-                          selectedEmbedders.forEach(emb => {
-                            allCombinations.push(`${conv}_${chunk}_${emb}`);
-                          });
-                        });
-                      });
-                      
-                      const maxDisplay = 12;
-                      const toShow = allCombinations.slice(0, maxDisplay);
-                      
-                      return (
-                        <>
-                          {toShow.map((combination, index) => (
-                            <span key={`${combination}-${index}`} className="text-xs bg-[#3a3a3a] px-2 py-1 rounded">
-                              {combination}
-                            </span>
-                          ))}
-                          {allCombinations.length > maxDisplay && (
-                            <span className="text-xs text-zinc-500 px-2 py-1">
-                              +{allCombinations.length - maxDisplay} more...
-                            </span>
-                          )}
-                        </>
-                      );
-                    })()}
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {processingCombinations.map((combination, index) => (
+                      <button
+                        key={`${combination.converter}_${combination.chunker}_${combination.embedder}_${index}`}
+                        onClick={() => toggleCombination(index)}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded transition-all duration-200 border",
+                          combination.enabled 
+                            ? "bg-[#3a3a3a] border-[#4a4a4a] text-zinc-300 hover:bg-[#4a4a4a]" 
+                            : "bg-[#1a1a1a] border-[#2a2a2a] text-zinc-500 line-through opacity-60"
+                        )}
+                      >
+                        {combination.converter}_{combination.chunker}_{combination.embedder}
+                      </button>
+                    ))}
                   </div>
+                  {processingCombinations.length === 0 && (
+                    <div className="text-xs text-zinc-500 text-center py-2">
+                      Select converters, chunkers, and embedders to see combinations
+                    </div>
+                  )}
                 </div>
                 
                 {/* Action Buttons */}
@@ -781,9 +815,7 @@ export default function ChatInterface() {
                     disabled={
                       !googleDriveLink.trim() || 
                       isSubmittingUpload ||
-                      selectedConverters.length === 0 ||
-                      selectedChunkers.length === 0 ||
-                      selectedEmbedders.length === 0
+                      processingCombinations.filter(c => c.enabled).length === 0
                     }
                     className="bg-[#1a7f64] hover:bg-[#18735a]"
                   >
