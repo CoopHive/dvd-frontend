@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/api-client';
+import type { ApiRequestData } from '@/lib/types';
 
 /**
  * Frontend API Configuration
@@ -8,24 +9,24 @@ export const API_CONFIG = {
   // Light server - quick operations (evaluation, status)
   light: {
     validateEmail: (email: string) => apiClient.validateEmail(email),
-    researchScrape: (data: any) => apiClient.researchScrape(data),
+    researchScrape: (data: ApiRequestData) => apiClient.researchScrape(data),
     status: (userEmail: string) => apiClient.getLightStatus(userEmail),
     health: () => apiClient.getLightHealth(),
   },
   // Heavy server - resource-intensive operations (ingestion, processing)
   heavy: {
-    ingest: (data: any) => apiClient.ingestGdrive(data),
-    embed: (data: any) => apiClient.generateEmbeddings(data),
+    ingest: (data: ApiRequestData) => apiClient.ingestGdrive(data),
+    embed: (data: ApiRequestData) => apiClient.generateEmbeddings(data),
     health: () => apiClient.getHeavyHealth(),
   },
   // Database server - database creation and management
   database: {
-    evaluate: (data: any) => apiClient.evaluate(data),
-    storeEvaluation: (data: any) => apiClient.storeEvaluation(data),
+    evaluate: (data: ApiRequestData) => apiClient.evaluate(data),
+    storeEvaluation: (data: ApiRequestData) => apiClient.storeEvaluation(data),
     health: () => apiClient.getDatabaseHealth(),
-    whitelistAdd: (data: any) => apiClient.addToWhitelist(data),
+    whitelistAdd: (data: ApiRequestData) => apiClient.addToWhitelist(data),
     whitelistGet: () => apiClient.getWhitelist(),
-    whitelistRemove: (data: any) => apiClient.removeFromWhitelist(data),
+    whitelistRemove: (data: ApiRequestData) => apiClient.removeFromWhitelist(data),
   },
   model: "openai/gpt-4o-mini",
 };

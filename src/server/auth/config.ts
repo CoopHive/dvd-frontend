@@ -59,20 +59,20 @@ async function isEmailAllowed(email: string): Promise<boolean> {
  * @see https://next-auth.js.org/configuration/options
  */
 export const authConfig = {
+  // Use JWT strategy for session management
+  session: {
+    strategy: "jwt" as const,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  // JWT configuration
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     }),
-    /**
-     * ...add more providers here.
-     *
-     * Most other providers require a bit more work than the Discord provider. For example, the
-     * GitHub provider requires you to add the `refresh_token_expires_in` field to the Account
-     * model. Refer to the NextAuth.js docs for the provider you want to use. Example:
-     *
-     * @see https://next-auth.js.org/providers/github
-     */
   ],
   pages: {
     signIn: "/auth/signin",
@@ -89,49 +89,29 @@ export const authConfig = {
           return "/auth/access-denied";
         }
         
-        // After successful email validation, mint JWT tokens and set cookies
-        try {
-          console.log('🔑 Creating JWT tokens for user:', email);
-          const { createTokens } = await import('@/lib/jwt');
-          const { cookies } = await import('next/headers');
-          
-          // Create JWT tokens
-          const tokens = createTokens(email.toLowerCase());
-          
-          // Set JWT tokens as HttpOnly cookies
-          const cookieStore = await cookies();
-          
-          cookieStore.set('access_token', tokens.accessToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-            maxAge: 15 * 60 // 15 minutes
-          });
-          
-          cookieStore.set('refresh_token', tokens.refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-            maxAge: 30 * 24 * 60 * 60 // 30 days
-          });
-          
-          console.log('✅ JWT tokens created and cookies set for:', email);
-        } catch (error) {
-          console.error('Error creating JWT tokens:', error);
-          return "/auth/access-denied";
-        }
+        console.log('✅ Email validation successful for:', email);
       }
       
       return true;
     },
-    session: ({ session, token }) => ({
-      ...session,
-      user: {
-        ...session.user,
-        id: token.sub,
-      },
-    }),
+    async jwt({ token, user, account }) {
+      // Initial sign in
+      if (user && account) {
+        token.email = user.email?.toLowerCase();
+        token.provider = account.provider;
+        console.log('🔑 JWT token created for user:', token.email);
+      }
+      
+      return token;
+    },
+    async session({ session, token }) {
+      // Send properties to the client
+      if (token) {
+        session.user.id = token.sub!;
+        session.user.email = token.email!;
+      }
+      
+      return session;
+    },
   },
 } satisfies NextAuthConfig;

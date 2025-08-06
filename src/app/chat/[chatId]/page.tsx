@@ -1,11 +1,11 @@
 "use client";
 
 import { redirect } from "next/navigation";
-import { useJWTAuth } from "~/hooks/use-jwt-auth";
+import { useNextAuth } from "~/hooks/use-nextauth";
 import ChatInterface from "~/components/chat-interface";
 
 export default function ChatPage() {
-  const { isAuthenticated, isLoading } = useJWTAuth();
+  const { isAuthenticated, isLoading } = useNextAuth();
   
   // If the user is not authenticated, redirect to signin page
   if (!isLoading && !isAuthenticated) {

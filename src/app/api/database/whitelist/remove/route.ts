@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withAuthHandler } from '@/lib/auth-utils';
 import { SERVER_CONFIG } from '@/config/server-config';
 
@@ -6,9 +7,9 @@ import { SERVER_CONFIG } from '@/config/server-config';
  * POST /api/database/whitelist/remove
  * Protected proxy to database server whitelist removal
  */
-export const POST = withAuthHandler(async (user, request: NextRequest) => {
+export const POST = withAuthHandler(async (_user, request: NextRequest) => {
   try {
-    const body = await request.json();
+    const body = await request.json() as unknown;
     
     const response = await fetch(`${SERVER_CONFIG.database.url}${SERVER_CONFIG.database.endpoints.whitelistRemove}`, {
       method: 'POST',
@@ -18,7 +19,7 @@ export const POST = withAuthHandler(async (user, request: NextRequest) => {
       body: JSON.stringify(body),
     });
     
-    const data = await response.json();
+    const data = await response.json() as unknown;
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error('Database server whitelist-remove error:', error);

@@ -1,10 +1,12 @@
+import type { ApiRequestData } from './types';
+
 /**
  * Authenticated API Client for BFF (Backend for Frontend) proxy routes
- * Handles JWT token management and automatic refresh
+ * Uses NextAuth session management for authentication
  */
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
-  body?: any;
+  body?: ApiRequestData;
 }
 
 class AuthenticatedAPIClient {
@@ -13,7 +15,7 @@ class AuthenticatedAPIClient {
     
     const response = await fetch(url, {
       ...fetchOptions,
-      credentials: 'include', // Include JWT cookies
+      credentials: 'include', // Include NextAuth session cookies
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
@@ -21,31 +23,12 @@ class AuthenticatedAPIClient {
       body: body ? JSON.stringify(body) : undefined,
     });
     
-    // If we get a 401, try to refresh the token
+    // If we get a 401, redirect to login (NextAuth handles token refresh automatically)
     if (response.status === 401) {
-      const refreshResponse = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      
-      if (refreshResponse.ok) {
-        // Retry original request with refreshed token
-        return fetch(url, {
-          ...fetchOptions,
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-          },
-          body: body ? JSON.stringify(body) : undefined,
-        });
-      } else {
-        // Refresh failed, redirect to login
-        if (typeof window !== 'undefined') {
-          window.location.href = '/auth/signin';
-        }
-        throw new Error('Authentication failed');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth/signin';
       }
+      throw new Error('Authentication failed');
     }
     
     return response;
@@ -59,7 +42,7 @@ class AuthenticatedAPIClient {
     });
   }
 
-  async researchScrape(data: any) {
+  async researchScrape(data: ApiRequestData) {
     return this.makeRequest('/api/light/research-scrape', {
       method: 'POST',
       body: data,
@@ -79,14 +62,14 @@ class AuthenticatedAPIClient {
   }
 
   // Heavy Server Methods
-  async ingestGdrive(data: any) {
+  async ingestGdrive(data: ApiRequestData) {
     return this.makeRequest('/api/heavy/ingest-gdrive', {
       method: 'POST',
       body: data,
     });
   }
 
-  async generateEmbeddings(data: any) {
+  async generateEmbeddings(data: ApiRequestData) {
     return this.makeRequest('/api/heavy/embed', {
       method: 'POST',
       body: data,
@@ -100,7 +83,7 @@ class AuthenticatedAPIClient {
   }
 
   // Database Server Methods
-  async evaluate(data: any) {
+  async evaluate(data: ApiRequestData) {
     return this.makeRequest('/api/database/evaluate', {
       method: 'POST',
       body: data,
@@ -113,7 +96,7 @@ class AuthenticatedAPIClient {
     });
   }
 
-  async storeEvaluation(data: any) {
+  async storeEvaluation(data: ApiRequestData) {
     return this.makeRequest('/api/database/evaluation/store', {
       method: 'POST',
       body: data,
@@ -121,7 +104,7 @@ class AuthenticatedAPIClient {
   }
 
   // Whitelist Management
-  async addToWhitelist(data: any) {
+  async addToWhitelist(data: ApiRequestData) {
     return this.makeRequest('/api/database/whitelist/add', {
       method: 'POST',
       body: data,
@@ -134,7 +117,7 @@ class AuthenticatedAPIClient {
     });
   }
 
-  async removeFromWhitelist(data: any) {
+  async removeFromWhitelist(data: ApiRequestData) {
     return this.makeRequest('/api/database/whitelist/remove', {
       method: 'POST',
       body: data,
@@ -149,10 +132,14 @@ class AuthenticatedAPIClient {
       this.getDatabaseHealth(),
     ]);
 
+    const lightData = light.status === 'fulfilled' ? await light.value.json() as unknown : null;
+    const heavyData = heavy.status === 'fulfilled' ? await heavy.value.json() as unknown : null;
+    const databaseData = database.status === 'fulfilled' ? await database.value.json() as unknown : null;
+
     return {
-      light: light.status === 'fulfilled' ? await light.value.json() : null,
-      heavy: heavy.status === 'fulfilled' ? await heavy.value.json() : null,
-      database: database.status === 'fulfilled' ? await database.value.json() : null,
+      light: lightData,
+      heavy: heavyData,
+      database: databaseData,
     };
   }
 }

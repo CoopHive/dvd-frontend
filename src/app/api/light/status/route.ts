@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withAuthHandler } from '@/lib/auth-utils';
 import { SERVER_CONFIG } from '@/config/server-config';
 
@@ -30,7 +31,7 @@ export const GET = withAuthHandler(async (user, request: NextRequest) => {
       },
     });
     
-    const data = await response.json();
+    const data = await response.json() as unknown;
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error('Light server status error:', error);

@@ -8,8 +8,6 @@ export const env = createEnv({
    */
   server: {
     AUTH_SECRET: z.string(),
-    JWT_SECRET: z.string(),
-    JWT_REFRESH_SECRET: z.string(),
     GOOGLE_CLIENT_ID: z.string(),
     GOOGLE_CLIENT_SECRET: z.string(),
     LIGHT_SERVER_URL: z.string().optional(),
@@ -33,8 +31,6 @@ export const env = createEnv({
    */
   runtimeEnv: {
     AUTH_SECRET: process.env.AUTH_SECRET,
-    JWT_SECRET: process.env.JWT_SECRET,
-    JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     LIGHT_SERVER_URL: process.env.LIGHT_SERVER_URL,

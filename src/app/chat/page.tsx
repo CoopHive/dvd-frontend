@@ -1,7 +1,7 @@
 "use client";
 
 import { redirect } from "next/navigation";
-import { useJWTAuth } from "~/hooks/use-jwt-auth";
+import { useNextAuth } from "~/hooks/use-nextauth";
 import { useChat } from "~/hooks/use-chat";
 import ChatInterface from "~/components/chat-interface";
 import { useEffect } from "react";
@@ -20,7 +20,7 @@ function LoadingSpinner() {
 }
 
 export default function ChatIndexPage() {
-  const { isAuthenticated, isLoading } = useJWTAuth();
+  const { isAuthenticated, isLoading } = useNextAuth();
   
   // Handle authentication status first to avoid hook rule violations
   if (!isLoading && !isAuthenticated) {

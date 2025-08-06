@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { SERVER_CONFIG } from '@/config/server-config';
 
 interface EmailValidationRequest {
@@ -13,7 +14,7 @@ interface EmailValidationRequest {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body: EmailValidationRequest = await request.json();
+    const body = await request.json() as EmailValidationRequest;
     const { email } = body;
     
     if (!email) {
@@ -40,13 +41,13 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const data = await response.json();
+    const data = await response.json() as { isValid?: boolean };
     
     // Log the validation result
-    console.log(`Email validation request: ${email} - Valid: ${data.isValid || false}`);
+    console.log(`Email validation request: ${email} - Valid: ${data.isValid ?? false}`);
     
     return NextResponse.json({ 
-      isValid: data.isValid || false 
+      isValid: data.isValid ?? false 
     });
     
   } catch (error) {

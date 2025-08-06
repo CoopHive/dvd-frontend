@@ -2,11 +2,11 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useJWTAuth } from "~/hooks/use-jwt-auth";
+import { useNextAuth } from "~/hooks/use-nextauth";
 
 export default function Home() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useJWTAuth();
+  const { isAuthenticated, isLoading } = useNextAuth();
 
   useEffect(() => {
     if (!isLoading) {

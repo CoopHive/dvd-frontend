@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { withAuthHandler } from '@/lib/auth-utils';
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -32,7 +33,11 @@ interface OpenRouterPayload {
   max_tokens?: number;
 }
 
-export async function POST(request: NextRequest) {
+/**
+ * POST /api/openrouter
+ * Protected OpenRouter API proxy with JWT authentication
+ */
+export const POST = withAuthHandler(async (_user, request: NextRequest) => {
   try {
     if (!OPENROUTER_API_KEY) {
       return NextResponse.json(
@@ -243,4 +248,4 @@ Provide a thoughtful, well-structured response that addresses the user's questio
       { status: 400 }
     );
   }
-} 
+}); 

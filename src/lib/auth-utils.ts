@@ -1,5 +1,6 @@
-import { getCurrentUser } from '@/lib/jwt';
-import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth-nextauth';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 /**
  * Server-side route protection utility
@@ -9,7 +10,7 @@ export async function requireAuth(): Promise<{ email: string }> {
   const user = await getCurrentUser();
   
   if (!user) {
-    throw new Response('Unauthorized', { status: 401 });
+    throw new Error('Unauthorized');
   }
   
   return user;
@@ -19,17 +20,11 @@ export async function requireAuth(): Promise<{ email: string }> {
  * Middleware helper to protect API routes
  * Usage: const user = await withAuth(request);
  */
-export async function withAuth(request: NextRequest): Promise<{ email: string }> {
+export async function withAuth(_request: NextRequest): Promise<{ email: string }> {
   const user = await getCurrentUser();
   
   if (!user) {
-    throw new Response(
-      JSON.stringify({ error: 'Unauthorized' }), 
-      { 
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
+    throw new Error('Unauthorized');
   }
   
   return user;
@@ -38,7 +33,7 @@ export async function withAuth(request: NextRequest): Promise<{ email: string }>
 /**
  * Higher-order function to wrap API route handlers with authentication
  */
-export function withAuthHandler<T extends any[]>(
+export function withAuthHandler<T extends unknown[]>(
   handler: (user: { email: string }, ...args: T) => Promise<NextResponse>
 ) {
   return async (...args: T): Promise<NextResponse> => {
