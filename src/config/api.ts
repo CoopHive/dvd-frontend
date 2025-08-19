@@ -16,7 +16,6 @@ export const API_CONFIG = {
   // Heavy server - resource-intensive operations (ingestion, processing)
   heavy: {
     ingest: (data: ApiRequestData) => apiClient.ingestGdrive(data),
-    embed: (data: ApiRequestData) => apiClient.generateEmbeddings(data),
     health: () => apiClient.getHeavyHealth(),
   },
   // Database server - database creation and management

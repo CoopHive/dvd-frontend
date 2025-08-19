@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { BACKEND_API_CONFIG } from "~/config/backend-api";
+import { SERVER_CONFIG } from "@/config/server-config";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as Record<string, unknown>;
-    const url = `${BACKEND_API_CONFIG.light.url}${BACKEND_API_CONFIG.light.endpoints.validateEmail}`;
+    const url = `${SERVER_CONFIG.light.url}${SERVER_CONFIG.light.endpoints.validateEmail}`;
     
     const response = await fetch(url, {
       method: "POST",

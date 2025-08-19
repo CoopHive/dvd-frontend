@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { BACKEND_API_CONFIG } from "~/config/backend-api";
+import { SERVER_CONFIG } from "@/config/server-config";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ user_email: string }> }) {
   try {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       );
     }
 
-    const url = `${BACKEND_API_CONFIG.database.url}/api/whitelist/${encodeURIComponent(user_email)}`;
+    const url = `${SERVER_CONFIG.database.url}/api/whitelist/${encodeURIComponent(user_email)}`;
     
     const response = await fetch(url, {
       method: "GET",

@@ -7,7 +7,7 @@ export const SERVER_CONFIG = {
   light: {
     url: process.env.LIGHT_SERVER_URL ?? "http://localhost:5001",
     endpoints: {
-      status: "/api/status", 
+      status: "/api/v1/user/status", 
       health: "/health",
       validateEmail: "/api/auth/validate-email",
       researchScrape: "/api/research/scrape"
@@ -16,15 +16,14 @@ export const SERVER_CONFIG = {
   heavy: {
     url: process.env.HEAVY_SERVER_URL ?? "http://localhost:5002",
     endpoints: {
-      ingest: "/api/ingest/gdrive",
-      embed: "/api/embed",
+      ingest: "/api/v1/users/ingestion",
       health: "/health"
     }
   },
   database: {
     url: process.env.DATABASE_SERVER_URL ?? "http://localhost:5003",
     endpoints: {
-      evaluate: "/api/evaluate",
+      evaluate: "/api/v1/user/evaluate",
       storeEvaluation: "/api/evaluation/store",
       health: "/health",
       whitelistAdd: "/api/whitelist/add",
@@ -32,4 +31,9 @@ export const SERVER_CONFIG = {
       whitelistRemove: "/api/whitelist/remove"
     }
   }
+};
+
+// OpenRouter configuration (API key is server-side only)
+export const OPENROUTER_CONFIG = {
+  defaultModel: "openai/gpt-4o-mini",
 };

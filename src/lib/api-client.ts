@@ -69,13 +69,6 @@ class AuthenticatedAPIClient {
     });
   }
 
-  async generateEmbeddings(data: ApiRequestData) {
-    return this.makeRequest('/api/heavy/embed', {
-      method: 'POST',
-      body: data,
-    });
-  }
-
   async getHeavyHealth() {
     return this.makeRequest('/api/heavy/health', {
       method: 'GET',

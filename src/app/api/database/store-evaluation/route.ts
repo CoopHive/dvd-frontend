@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { BACKEND_API_CONFIG } from "~/config/backend-api";
+import { SERVER_CONFIG } from "@/config/server-config";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as Record<string, unknown>;
-    const url = `${BACKEND_API_CONFIG.database.url}${BACKEND_API_CONFIG.database.endpoints.storeEvaluation}`;
+    const url = `${SERVER_CONFIG.database.url}${SERVER_CONFIG.database.endpoints.storeEvaluation}`;
     
     const response = await fetch(url, {
       method: "POST",

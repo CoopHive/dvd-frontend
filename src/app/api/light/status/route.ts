@@ -8,7 +8,7 @@ import { SERVER_CONFIG } from '@/config/server-config';
  * Protected proxy to light server status check
  * Expects user_email as query parameter
  */
-export const GET = withAuthHandler(async (user, request: NextRequest) => {
+export const GET = withAuthHandler(async (_user, request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const userEmail = searchParams.get('user_email');
